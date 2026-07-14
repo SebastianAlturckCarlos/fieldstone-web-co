@@ -2,6 +2,8 @@
 
 Modern one-page site built with Vite, React 19, Tailwind CSS 4, and Framer Motion.
 
+**Live site:** https://sebastianalturckcarlos.github.io/fieldstone-web-co/
+
 ## Run it locally
 
 ```bash
