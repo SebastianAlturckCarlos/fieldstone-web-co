@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"/Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop\" 2>/dev/null | head -50)",
+      "Read(//Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/**)",
+      "Bash(find \"/Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/LS-Detailing\" -type f | head -40)",
+      "Read(//Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/LS-Detailing/**)",
+      "Read(//Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/LS-Detailing/site/src/assets/**)",
+      "Read(//Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/LS-Detailing/site/src/**)",
+      "Bash(ls \"/Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/LS-Detailing/site/src/components/\" 2>/dev/null; find \"/Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop\" -maxdepth 2 -iname \"*headshot*\" -o -maxdepth 2 -iname \"*sebastian*\" 2>/dev/null | grep -v node_modules | head)",
+      "Read(//Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/LS-Detailing/site/src/components/**)",
+      "Bash(find ~/Downloads ~/Pictures \"/Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/alturckcarlosweb\" -maxdepth 3 \\\\\\( -iname \"*headshot*\" -o -iname \"*head-shot*\" -o -iname \"*profile*pic*\" -o -iname \"*me.jpg\" -o -iname \"*me.png\" -o -iname \"*sebastian*\" \\\\\\) 2>/dev/null | grep -v node_modules | head -20)",
+      "Read(//Users/salturckcarlos/Downloads/**)",
+      "Read(//Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/LS-Detailing/site/**)",
+      "Bash(npm install *)",
+      "Bash(cp \"/Users/salturckcarlos/Downloads/headshot.jpg\" \"/Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/FieldstoneWebCo/src/assets/headshot.jpg\" && ls -la \"/Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/FieldstoneWebCo/src/assets/\")",
+      "Bash(npm run *)",
+      "Bash(ls /Applications/ | grep -i -E \"chrome|edge|brave|arc\" ; which chromium chrome 2>/dev/null; echo done)",
+      "Read(//Applications/**)",
+      "Bash(lsof -nP -iTCP:4173 -sTCP:LISTEN)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu --hide-scrollbars --window-size=1440,900 --virtual-time-budget=8000 --screenshot=/private/tmp/claude-502/-Users-salturckcarlos-Library-CloudStorage-OneDrive-RyanRTS-Desktop-FieldstoneWebCo/09c6024e-0979-4587-a967-6747a38cbfac/scratchpad/hero.png http://localhost:4174/)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu --hide-scrollbars --window-size=1440,5600 --virtual-time-budget=12000 --screenshot=/private/tmp/claude-502/-Users-salturckcarlos-Library-CloudStorage-OneDrive-RyanRTS-Desktop-FieldstoneWebCo/09c6024e-0979-4587-a967-6747a38cbfac/scratchpad/full.png http://localhost:4174/)",
+      "Bash(npm init *)",
+      "Bash(node shoot.mjs)",
+      "Bash(gh auth *)",
+      "Bash(git config *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'Fieldstone Web Co site — Vite + React + Tailwind 4 *)"
+    ],
+    "additionalDirectories": [
+      "/Users/salturckcarlos/Downloads",
+      "/Users/salturckcarlos/Library/CloudStorage/OneDrive-RyanRTS/Desktop/FieldstoneWebCo/components"
+    ]
+  }
+}
