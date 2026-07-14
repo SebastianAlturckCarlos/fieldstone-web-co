@@ -13,7 +13,7 @@ const INCLUDED = [
 
 export default function Pricing() {
   return (
-    <section id="pricing" className="relative py-24 sm:py-32">
+    <section id="pricing" className="relative overflow-hidden py-24 sm:py-32">
       <div className="glow left-[-10%] top-[20%] h-110 w-110 bg-ember-500/12" />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6">

@@ -26,7 +26,12 @@
       "Bash(git config *)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git commit -q -m 'Fieldstone Web Co site — Vite + React + Tailwind 4 *)"
+      "Bash(git commit -q -m 'Fieldstone Web Co site — Vite + React + Tailwind 4 *)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu --hide-scrollbars --window-size=1440,900 --virtual-time-budget=10000 --screenshot=/private/tmp/claude-502/-Users-salturckcarlos-Library-CloudStorage-OneDrive-RyanRTS-Desktop-FieldstoneWebCo/09c6024e-0979-4587-a967-6747a38cbfac/scratchpad/live.png https://sebastianalturckcarlos.github.io/fieldstone-web-co/)",
+      "Bash(git commit -q -m 'Add live site URL to README *)",
+      "Bash(git push *)",
+      "Bash(node overflow-check.mjs)",
+      "Bash(git commit -q -m 'Lock page to viewport width — clip decorative glows that caused horizontal scroll *)"
     ],
     "additionalDirectories": [
       "/Users/salturckcarlos/Downloads",

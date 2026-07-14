@@ -43,6 +43,13 @@ html {
   scroll-padding-top: 5rem;
 }
 
+/* Lock the page to the viewport width — decorative elements may never cause sideways scroll. */
+html,
+body {
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
 body {
   @apply bg-night-950 font-body text-fog-300 antialiased;
 }

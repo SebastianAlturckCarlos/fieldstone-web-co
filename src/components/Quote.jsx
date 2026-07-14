@@ -38,7 +38,7 @@ export default function Quote() {
   }
 
   return (
-    <section id="quote" className="relative border-t border-night-700 bg-night-900/40 py-24 sm:py-32">
+    <section id="quote" className="relative overflow-hidden border-t border-night-700 bg-night-900/40 py-24 sm:py-32">
       <div className="glow left-[20%] top-[-20%] h-100 w-100 bg-ember-500/12" />
 
       <div className="relative mx-auto max-w-3xl px-4 sm:px-6">
