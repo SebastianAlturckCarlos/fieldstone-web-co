@@ -3,12 +3,15 @@ import Logo from './Logo'
 import SocialIcons from './SocialIcons'
 import { BUSINESS } from '../config'
 
+// Base-aware links so the footer works from the homepage and /about/ alike.
+const BASE = import.meta.env.BASE_URL
+
 const LINKS = [
-  { label: 'Services', href: '#services' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'How it works', href: '#process' },
-  { label: 'About', href: '#about' },
-  { label: 'Get a quote', href: '#quote' },
+  { label: 'The platform', href: `${BASE}#platform` },
+  { label: 'Plans', href: `${BASE}#plans` },
+  { label: 'How it works', href: `${BASE}#process` },
+  { label: 'About', href: `${BASE}about/` },
+  { label: 'Book a Discovery Call', href: `${BASE}#contact` },
 ]
 
 export default function Footer() {
@@ -17,12 +20,12 @@ export default function Footer() {
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6">
         <div className="grid gap-12 md:grid-cols-3">
           <div>
-            <a href="#top" aria-label={BUSINESS.name}>
+            <a href={`${BASE}#top`} aria-label={BUSINESS.name}>
               <Logo />
             </a>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-fog-500">
-              {BUSINESS.tagline} ${BUSINESS.launchPrice} to launch, ${BUSINESS.monthlyPrice}/month
-              after — with edits fixed the same day you ask.
+              {BUSINESS.tagline} Custom CRM, POS, and portal systems that run multi-truck trade
+              operations from first call to cleared payment.
             </p>
             <SocialIcons className="mt-6" />
           </div>
@@ -57,7 +60,7 @@ export default function Footer() {
               Proudly serving
             </p>
             <p className="mt-2 max-w-xs text-sm leading-relaxed text-fog-400">
-              {BUSINESS.serviceAreas.join(' · ')} — and anywhere local business needs a hand.
+              {BUSINESS.serviceAreas.join(' · ')} — and trade operations nationwide.
             </p>
           </div>
         </div>

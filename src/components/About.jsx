@@ -24,7 +24,7 @@ export default function About() {
             />
             <div className="absolute -bottom-5 -right-5 rounded-2xl border border-night-600 bg-night-900/95 px-5 py-3 shadow-xl backdrop-blur">
               <p className="font-display font-semibold text-fog-100">Sebastian</p>
-              <p className="text-xs text-ember-400">Founder & Builder</p>
+              <p className="text-xs text-ember-400">Founder & Lead Engineer</p>
             </div>
           </div>
         </Reveal>
@@ -34,30 +34,33 @@ export default function About() {
             Who you're working with
           </p>
           <h2 className="mt-3 font-display text-4xl font-bold tracking-tight text-fog-100 sm:text-5xl">
-            Hey, I'm Sebastian. <span className="text-gradient">Your web guy.</span>
+            Software built by someone <span className="text-gradient">who answers the phone.</span>
           </h2>
           <div className="mt-6 space-y-4 leading-relaxed text-fog-400">
             <p>
-              I started {BUSINESS.name} because too many great local businesses have no website —
-              or one from 2012 that hasn't been touched since. Agencies want thousands of dollars.
-              DIY builders eat your weekends. Neither should be the only option.
+              I'm Sebastian, founder of {BUSINESS.name}. I build operational software for trade
+              businesses that have outgrown their tools — the shops whose crews kept multiplying
+              while the back office still runs on the spreadsheets they used at two trucks.
             </p>
             <p>
-              When you work with Fieldstone, you work with me directly. No ticket queues, no
-              account managers, no waiting a week for someone to change your hours. You text me,
-              and it's <span className="font-semibold text-fog-100">fixed then and there</span>.
+              Off-the-shelf platforms make your operation bend to their workflow. I do the
+              opposite: study how your dispatchers, estimators, and techs actually work, then
+              build the system around it. And when you need something changed, you talk{' '}
+              <span className="font-semibold text-fog-100">directly to the engineer who built it</span>{' '}
+              — no account managers, no ticket queues.
             </p>
             <p>
-              Like a fieldstone wall, a good website is built to last — one solid piece at a time.
+              Like a fieldstone wall, good software is built to carry weight for decades — one
+              solid piece at a time.
             </p>
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-6">
             <a
-              href="#quote"
+              href={`${import.meta.env.BASE_URL}#contact`}
               className="rounded-full bg-linear-to-r from-ember-400 to-ember-600 px-7 py-3.5 font-semibold text-night-950 transition-transform duration-300 hover:scale-105"
             >
-              Let's talk
+              Book a Discovery Call
             </a>
             <SocialIcons />
           </div>

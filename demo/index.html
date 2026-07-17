@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Internal launcher for client demos. Link-only, never indexed. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Fieldstone — Demo Launcher</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --night: #0b0a08;
+        --panel: #121110;
+        --border: #272421;
+        --fog: #cfc9bf;
+        --fog-dim: #7c7568;
+        --ember: #f59314;
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: var(--night);
+        color: var(--fog);
+        font-family: 'Inter', system-ui, sans-serif;
+        padding: 2rem 1rem;
+      }
+      main { width: 100%; max-width: 34rem; }
+      h1 {
+        font-family: 'Space Grotesk', system-ui, sans-serif;
+        font-size: 1.5rem;
+        color: #f4f2ee;
+      }
+      .sub { margin-top: 0.5rem; font-size: 0.875rem; color: var(--fog-dim); }
+      ul { list-style: none; margin-top: 2rem; display: grid; gap: 0.75rem; padding: 0; }
+      a.card {
+        display: block;
+        padding: 1.1rem 1.25rem;
+        border: 1px solid var(--border);
+        border-radius: 0.9rem;
+        background: var(--panel);
+        text-decoration: none;
+        color: inherit;
+        transition: border-color 0.2s;
+      }
+      a.card:hover { border-color: var(--ember); }
+      .tier {
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ember);
+      }
+      .name { margin-top: 0.3rem; font-weight: 600; color: #f4f2ee; }
+      .desc { margin-top: 0.2rem; font-size: 0.8rem; color: var(--fog-dim); }
+      .soon { opacity: 0.45; pointer-events: none; }
+      footer { margin-top: 2rem; font-size: 0.7rem; color: var(--fog-dim); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Client Demo Launcher</h1>
+      <p class="sub">Internal index of product mocks. Send prospects the direct tier link — this page is unlisted and noindexed.</p>
+      <ul>
+        <li>
+          <a class="card" href="tier1-wedge/">
+            <span class="tier">Tier 1 · Operations Kickstart</span>
+            <p class="name">Fieldstone Wedge — Dispatch &amp; Fast Quote</p>
+            <p class="desc">Metric cards, dispatch board, SMS quote panel</p>
+          </a>
+        </li>
+        <li>
+          <a class="card" href="tier2-crm/">
+            <span class="tier">Tier 2 · Growth CRM Suite</span>
+            <p class="name">Fieldstone Growth CRM — Owner Dashboard</p>
+            <p class="desc">Revenue &amp; leakage analytics, sales pipeline, live activity feed</p>
+          </a>
+        </li>
+        <li>
+          <a class="card soon" href="#" aria-disabled="true">
+            <span class="tier">Tier 3 · Custom Enterprise Architecture</span>
+            <p class="name">Coming next</p>
+            <p class="desc">POS routing, white-labeled portals, integrations</p>
+          </a>
+        </li>
+      </ul>
+      <footer>Fieldstone Web Co — internal use</footer>
+    </main>
+  </body>
+</html>

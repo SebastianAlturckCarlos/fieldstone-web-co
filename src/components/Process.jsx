@@ -1,24 +1,24 @@
-import { MessageSquareText, Hammer, Rocket } from 'lucide-react'
+import { SearchCheck, Hammer, Rocket } from 'lucide-react'
 import Reveal from './Reveal'
 
 const STEPS = [
   {
-    Icon: MessageSquareText,
+    Icon: SearchCheck,
     step: '01',
-    title: 'Tell us your story',
-    body: 'A quick 15-minute chat about your business — what you do, who you serve, what you want people to see.',
+    title: 'Discovery & ops audit',
+    body: 'A working session with your ops leadership. We map every handoff from first ring to cleared payment, quantify where margin leaks, and rank the fixes by dollar impact.',
   },
   {
     Icon: Hammer,
     step: '02',
-    title: 'We lay the stones',
-    body: 'We design and build your site in days. You review it, we polish it until you love it.',
+    title: 'Architect & build',
+    body: 'We blueprint your system, then build in weekly increments you review live — starting with the bottleneck costing you the most, so ROI lands before the full rollout does.',
   },
   {
     Icon: Rocket,
     step: '03',
-    title: 'Launch & relax',
-    body: 'Your site goes live and we handle everything after. Need a change? Text us — fixed the same day.',
+    title: 'Deploy, train & scale',
+    body: 'Office and field teams onboarded crew by crew, with zero disruption to scheduled jobs. Then we stay on: monitoring, support, and new modules as you add trucks.',
   },
 ]
 
@@ -28,10 +28,10 @@ export default function Process() {
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6">
         <Reveal>
           <p className="font-display text-sm font-semibold uppercase tracking-[0.3em] text-ember-400">
-            How it works
+            How engagements work
           </p>
           <h2 className="mt-3 max-w-2xl font-display text-4xl font-bold tracking-tight text-fog-100 sm:text-5xl">
-            From first chat to live site, <span className="text-gradient">in days.</span>
+            From ops audit to full deployment — <span className="text-gradient">without missing a job.</span>
           </h2>
         </Reveal>
 

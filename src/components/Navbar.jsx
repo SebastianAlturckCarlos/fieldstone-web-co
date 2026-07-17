@@ -4,11 +4,15 @@ import { Menu, X, ArrowRight } from 'lucide-react'
 import Logo from './Logo'
 import { BUSINESS } from '../config'
 
+// Home anchors carry the base path so they resolve from any page,
+// in dev (/) and on GitHub Pages (/fieldstone-web-co/) alike.
+const BASE = import.meta.env.BASE_URL
+
 const LINKS = [
-  { label: 'Services', href: '#services' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'How it works', href: '#process' },
-  { label: 'About', href: '#about' },
+  { label: 'Platform', href: `${BASE}#platform` },
+  { label: 'Plans', href: `${BASE}#plans` },
+  { label: 'How it works', href: `${BASE}#process` },
+  { label: 'About', href: `${BASE}about/` },
 ]
 
 export default function Navbar() {
@@ -31,7 +35,7 @@ export default function Navbar() {
       }`}
     >
       <nav className="mx-auto flex h-18 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <a href="#top" aria-label={BUSINESS.name}>
+        <a href={`${BASE}#top`} aria-label={BUSINESS.name}>
           <Logo />
         </a>
 
@@ -46,10 +50,10 @@ export default function Navbar() {
             </a>
           ))}
           <a
-            href="#quote"
+            href={`${BASE}#contact`}
             className="group flex items-center gap-2 rounded-full bg-linear-to-r from-ember-400 to-ember-600 px-5 py-2.5 text-sm font-semibold text-night-950 transition-transform duration-300 hover:scale-105"
           >
-            Start for ${BUSINESS.launchPrice}
+            Book a Discovery Call
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </a>
         </div>
@@ -84,11 +88,11 @@ export default function Navbar() {
                 </a>
               ))}
               <a
-                href="#quote"
+                href={`${BASE}#contact`}
                 onClick={() => setOpen(false)}
                 className="mt-2 rounded-full bg-linear-to-r from-ember-400 to-ember-600 px-5 py-3 text-center font-semibold text-night-950"
               >
-                Start for ${BUSINESS.launchPrice}
+                Book a Discovery Call
               </a>
             </div>
           </motion.div>

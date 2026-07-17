@@ -1,13 +1,14 @@
-import { BUSINESS } from '../config'
-
 const ITEMS = [
-  `$${BUSINESS.launchPrice} to launch`,
-  `$${BUSINESS.monthlyPrice}/month after`,
-  'Same-day edits',
-  'Mobile-first design',
-  'Local SEO',
-  'No contracts',
-  ...BUSINESS.serviceAreas,
+  'Custom CRM',
+  'Dispatch & routing',
+  'Integrated POS',
+  'Client portals',
+  'Employee portals',
+  '99.9% uptime SLA',
+  'HVAC',
+  'Plumbing',
+  'Electrical',
+  'Multi-truck fleets',
 ]
 
 export default function Marquee() {

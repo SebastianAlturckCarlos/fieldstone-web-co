@@ -1,6 +1,8 @@
 # Fieldstone Web Co — Company Site
 
-Modern one-page site built with Vite, React 19, Tailwind CSS 4, and Framer Motion.
+Marketing site built with Vite, React 19, Tailwind CSS 4, and Framer Motion.
+Two pages: the main landing page (`/`) and a standalone about page (`/about/`),
+built as a Vite multi-page app — no client-side router.
 
 **Live site:** https://sebastianalturckcarlos.github.io/fieldstone-web-co/
 
@@ -19,6 +21,21 @@ npm run deploy   # builds + publishes dist/ to GitHub Pages (needs a git repo wi
 ```
 
 The `dist/` folder is plain static files — it also works on Netlify, Vercel, Cloudflare Pages, etc.
+
+## Client demos (hidden routes)
+
+Product mocks for prospects live under `/demo/` — unlisted, `noindex`, shared by link only.
+`/demo/` itself is an internal launcher page listing every mock.
+
+| Tier | Route | Component |
+| --- | --- | --- |
+| 1 — Operations Kickstart | `/demo/tier1-wedge/` | `src/demos/Tier1WedgeDemo.jsx` |
+| 2 — Growth CRM Suite | `/demo/tier2-crm/` | `src/demos/Tier2CRMDemo.jsx` |
+
+Naming convention: route `demo/tier<N>-<product>/index.html` ↔ component
+`src/demos/Tier<N><Product>Demo.jsx` ↔ entry `src/demos/tier<N>-<product>.jsx`.
+To add one: copy an existing trio, then register the new `index.html` in
+`vite.config.js` under `build.rollupOptions.input` and add a card to `demo/index.html`.
 
 ## Editing business info
 

@@ -1,10 +1,11 @@
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
 import Marquee from './components/Marquee'
-import Services from './components/Services'
-import Pricing from './components/Pricing'
+import PainPoints from './components/PainPoints'
+import Platform from './components/Platform'
+import Security from './components/Security'
+import TradePlans from './components/TradePlans'
 import Process from './components/Process'
-import About from './components/About'
 import Quote from './components/Quote'
 import Footer from './components/Footer'
 import ScrollProgress from './components/ScrollProgress'
@@ -17,10 +18,11 @@ export default function App() {
       <main>
         <Hero />
         <Marquee />
-        <Services />
-        <Pricing />
+        <PainPoints />
+        <Platform />
+        <Security />
+        <TradePlans />
         <Process />
-        <About />
         <Quote />
       </main>
       <Footer />
