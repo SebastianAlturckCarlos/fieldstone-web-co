@@ -75,3 +75,10 @@ living in its own top-level folder so the two never mix.
 `apps/README.md` to get it running locally. Both files are meant to be kept
 up to date as the build continues — treat them as the shared source of truth
 rather than asking what's been done so far.
+
+## Project Context — day-to-day work logs
+
+[`Project Context/`](Project%20Context/) holds the dated work logs and
+reference notes (site map, decisions, gotchas) — the "what happened and why"
+layer between commits and the blueprint. One file per working day; see the
+folder's own README for the convention. Keep it updated as you work.
