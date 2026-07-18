@@ -3,7 +3,7 @@
 // SEND_MODE=mock stamps the DB and goes nowhere; =resend delivers for real.
 import { db } from '../core/database.js'
 import {
-  AGENT_MODE, SEND_MODE, RESEND_API_KEY, SEND_FROM, DAILY_SEND_CAP, BUSINESS_POSTAL_ADDRESS,
+  AGENT_MODE, SEND_MODE, RESEND_API_KEY, SEND_FROM, DAILY_SEND_CAP, BUSINESS_POSTAL_ADDRESS, REPLY_TO,
 } from '../core/config.js'
 import { emitEvent } from '../core/events.js'
 
@@ -38,7 +38,10 @@ export async function deliver(to: string, subject: string, body: string): Promis
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { authorization: `Bearer ${RESEND_API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: SEND_FROM, to: [to], subject, text: body }),
+      body: JSON.stringify({
+        from: SEND_FROM, to: [to], subject, text: body,
+        ...(REPLY_TO ? { reply_to: REPLY_TO } : {}),
+      }),
     })
     if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`)
     return ((await res.json()) as any).id

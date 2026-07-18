@@ -4,7 +4,8 @@ Marketing site built with Vite, React 19, Tailwind CSS 4, and Framer Motion.
 Two pages: the main landing page (`/`) and a standalone about page (`/about/`),
 built as a Vite multi-page app — no client-side router.
 
-**Live site:** https://sebastianalturckcarlos.github.io/fieldstone-web-co/
+**Live site:** https://fieldstone-webco.com (the old
+sebastianalturckcarlos.github.io/fieldstone-web-co/ URLs 301-redirect here)
 
 ## Run it locally
 

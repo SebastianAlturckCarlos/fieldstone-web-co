@@ -3,11 +3,13 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// Base path is only needed on GitHub Pages (served from /fieldstone-web-co/);
-// local dev stays at plain http://localhost:5173/.
-export default defineConfig(({ command }) => ({
+// Served at the custom domain root (https://fieldstone-webco.com — CNAME in
+// public/). The old github.io/fieldstone-web-co/ URLs 301-redirect here, so
+// base stays '/' everywhere. Do NOT reintroduce a subpath base: it was the
+// cause of the white-page bug when the custom domain went live.
+export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
-  base: command === 'build' ? '/fieldstone-web-co/' : '/',
+  base: '/',
   build: {
     rollupOptions: {
       // Multi-page build: the homepage, the standalone /about/ page, and

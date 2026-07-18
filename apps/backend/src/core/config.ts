@@ -26,8 +26,12 @@ export const RESEND_API_KEY = process.env.RESEND_API_KEY ?? ''
 export const SEND_FROM = process.env.SEND_FROM ?? 'sebastian@mail.fieldstone-webco.com'
 export const DAILY_SEND_CAP = Number(process.env.DAILY_SEND_CAP ?? 10)
 export const BUSINESS_POSTAL_ADDRESS = process.env.BUSINESS_POSTAL_ADDRESS ?? ''
-// Where the personalized demo pages live (the marketing site)
-export const SITE_BASE = process.env.SITE_BASE ?? 'https://sebastianalturckcarlos.github.io/fieldstone-web-co'
+// Where the personalized demo pages live (the marketing site, custom domain —
+// the old github.io/fieldstone-web-co URLs 301-redirect here)
+export const SITE_BASE = process.env.SITE_BASE ?? 'https://fieldstone-webco.com'
+// Replies land here until real inbound exists on mail.fieldstone-webco.com
+// (the subdomain has no MX record — without a Reply-To, replies bounce).
+export const REPLY_TO = process.env.REPLY_TO ?? ''
 export const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434'
 
 // $/MTok used ONLY to estimate api-mode spend for the budget caps.
