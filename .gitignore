@@ -8,3 +8,14 @@ dist
 # The private outreach/admin dashboard lives here but must never be published
 # with the public marketing site — its own git repo tracks it privately.
 /admin/
+
+# Agentic OS engine (apps/) — runtime artifacts, never committed
+apps/backend/node_modules/
+apps/backend/.env
+apps/backend/*.db
+apps/backend/*.db-shm
+apps/backend/*.db-wal
+apps/backend/serve.log
+apps/backend/dist/
+apps/dashboard/node_modules/
+apps/dashboard/dist/

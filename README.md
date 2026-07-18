@@ -54,3 +54,24 @@ email app opens pre-filled as a fallback, so no lead is lost.
 
 The logo is code, not an image — three stacked fieldstones forming an "F"
 ([src/components/Logo.jsx](src/components/Logo.jsx), mirrored in [public/favicon.svg](public/favicon.svg)).
+
+---
+
+## Agentic OS — the internal client-acquisition engine
+
+This repo also holds a second, unrelated project: an automated engine that
+researches trade-services prospects, drafts personalized outreach, and runs
+a dashboard to supervise it — completely separate code from the site above,
+living in its own top-level folder so the two never mix.
+
+- **Code:** [`apps/`](apps/) — a Node/TypeScript backend + a Vite/React/Three.js
+  dashboard (the folder's own [`apps/README.md`](apps/README.md) has full setup
+  instructions, the cost-safety model, and an Obsidian vault guide).
+- **The plan:** [`Master_Blueprint.md`](Master_Blueprint.md) is the living design
+  doc — business model, agent prompts, database schema, design system, and a
+  sprint-by-sprint build log (what's shipped, in progress, or still ahead).
+
+**If you're picking this up fresh:** read `Master_Blueprint.md` first, then
+`apps/README.md` to get it running locally. Both files are meant to be kept
+up to date as the build continues — treat them as the shared source of truth
+rather than asking what's been done so far.

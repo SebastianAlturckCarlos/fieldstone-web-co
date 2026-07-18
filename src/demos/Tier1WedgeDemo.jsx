@@ -16,6 +16,15 @@ import {
   Plus,
 } from 'lucide-react'
 
+// ─── Per-lead personalization (outreach links carry ?co=&trade=) ─────────────
+// The acquisition engine sends prospects here with their company name in the
+// URL, so the mock reads as "your preview," not a generic demo.
+const _params = typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search)
+  : new URLSearchParams()
+const LEAD_COMPANY = (_params.get('co') || '').slice(0, 48).trim()
+const LEAD_TRADE = (_params.get('trade') || '').slice(0, 24).trim()
+
 // ─── Sample data (static mock — no state, no network) ────────────────────────
 
 const METRICS = [
@@ -163,12 +172,18 @@ function Header() {
       </div>
       <div className="min-w-0">
         <div className="flex items-center gap-2.5">
-          <h1 className="truncate font-semibold text-slate-900">Fieldstone Wedge</h1>
+          <h1 className="truncate font-semibold text-slate-900">
+            {LEAD_COMPANY || 'Fieldstone Wedge'}
+          </h1>
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700">
-            Demo · Sample Data
+            {LEAD_COMPANY ? 'Your Preview · Sample Data' : 'Demo · Sample Data'}
           </span>
         </div>
-        <p className="text-xs text-slate-500">Dispatch Overview — Thursday, Jul 17</p>
+        <p className="text-xs text-slate-500">
+          {LEAD_COMPANY
+            ? `What ${LEAD_TRADE || 'your'} dispatch could look like — built by Fieldstone Web Co`
+            : 'Dispatch Overview — Thursday, Jul 17'}
+        </p>
       </div>
 
       <div className="ml-auto flex items-center gap-3">

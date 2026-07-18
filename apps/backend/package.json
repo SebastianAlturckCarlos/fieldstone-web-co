@@ -1,0 +1,20 @@
+{
+  "name": "fieldstone-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "serve": "tsx src/server.ts",
+    "seed": "tsx src/jobs/seed.ts",
+    "tick": "tsx src/tick.ts",
+    "status": "tsx src/jobs/status.ts",
+    "reset": "tsx src/jobs/reset.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
