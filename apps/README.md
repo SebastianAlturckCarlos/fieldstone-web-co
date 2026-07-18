@@ -58,10 +58,11 @@ npm install
 npm run dev                   # opens on :5180, proxies /api to :4600
 ```
 
-Open **http://localhost:5180**. The engine ticks itself every 60s whenever
-leads are pending — you don't need to click anything for it to work. Your
-job is the Approvals queue: read what the CEO agent queued, approve or
-reject.
+Open **http://localhost:5180**. The engine is fully autonomous — it ticks
+itself every 60s whenever leads are pending, drafts, QA-loops, and sends
+approved mail with no clicking required. Your job is the **CEO console**
+(the crown button, or click CEO anywhere): read what the agents queued,
+approve or reject.
 
 ## The cost model — read this before changing `AGENT_MODE`
 
@@ -85,7 +86,7 @@ pay per token (check current Anthropic pricing first — rates in
 ```bash
 # backend (apps/backend)
 npm run seed     # load 10 sample leads + 1 sample pending skill
-npm run tick     # run one orchestrator pass from the CLI (same as the dashboard button)
+npm run tick     # run one orchestrator pass from the CLI (debugging only — the server ticks itself)
 npm run status   # print pipeline/ledger state to the terminal
 npm run reset    # wipe leads/drafts/ledger back to empty (does NOT touch skills or memory)
 npm run serve    # start the HTTP/SSE API the dashboard talks to (:4600)
@@ -98,13 +99,30 @@ npm run build    # production build -> dist/
 ## What the dashboard shows
 
 - **Mission Control** — the Synapse Core sphere (visualizes agent activity as
-  light), the agent roster (click an agent for its stats + recent runs +
-  prompt), the live activity feed, and the Approval queue (your actual job).
+  light; **click it to fly inside** — the org rendered spatially, Esc to
+  exit), the agent roster (workers open detail panels; **CEO opens the
+  command console**), and the live activity feed.
+- **CEO console** (crown button — your actual job) — the approval queue with
+  the full agent chain behind every draft (Researcher audited · CMO drafted ·
+  CEO scored · Sales Rep consulted), the follow-up queue, pause/resume
+  sends, and digest / Dev Agent triggers.
+- **Pipeline** — the 5-stage funnel with conversion % between stages, the
+  Reply Desk (paste a prospect reply → the Sales Rep classifies it), and the
+  dense lead table.
 - **Growth** — MRR milestone tracker, funnel counts, token-usage trend, the
   daily Analytics digest (also written to `vault/Financial Growth/` if you
   set up an Obsidian vault — see below), and the **Skill Factory** review
   queue: code the Dev Agent writes for itself, which never runs until a human
   reads it and clicks Approve.
+- **JARVIS** (header toggle) — talk to the engine: status questions and
+  commands ("approve the Comfort King draft", "pause sends"), voice in/out
+  via the browser's speech API. Actions run through a whitelist — it can do
+  nothing a dashboard button can't.
+
+Performance note: the sphere auto-tunes itself (full cinema → lean → static)
+based on measured frame rate and remembers the choice per browser — a weak
+GPU gets a clean static frame instead of a slideshow. The tiny `q2 · 60fps`
+readout under the sphere shows which tier you're on.
 
 ## Setting up your own Obsidian vault (optional but recommended)
 
