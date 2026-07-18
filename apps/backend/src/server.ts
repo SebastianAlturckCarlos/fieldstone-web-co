@@ -382,6 +382,10 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Fieldstone engine API on http://localhost:${PORT} (mode: ${AGENT_MODE})`)
+  // Crash recovery: leads stuck mid-claim from a previous process return to
+  // the queue — nothing needs a human to un-wedge the pipeline.
+  const reclaimed = db.prepare(`UPDATE leads SET lead_status='pending', updated_at=CURRENT_TIMESTAMP WHERE lead_status='processing'`).run().changes
+  if (reclaimed) console.log(`Reclaimed ${reclaimed} lead(s) stuck in 'processing' from a previous run.`)
   if (AUTO_TICK) {
     console.log(`Auto-tick every ${AUTO_TICK_MS / 1000}s — agents run themselves; the human only approves.`)
     setInterval(async () => {

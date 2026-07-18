@@ -94,7 +94,7 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
       'claude', ['-p', prompt, '--output-format', 'json', '--model', model],
       { timeout: 180_000, maxBuffer: 10 * 1024 * 1024 },
     )
-    const wrapper = JSON.parse(stdout)
+    const wrapper = extractJson(stdout)
     recordRun(agentId, model, 'claude-code',
       wrapper.usage?.input_tokens ?? 0, wrapper.usage?.output_tokens ?? 0,
       Date.now() - started, leadId)
@@ -125,7 +125,17 @@ function parseAgentOutput(agentId: string, text: string): any {
   if (agentId === 'ceo_agent') return parseCeoVerdict(text)
   if (agentId === 'analytics_agent') return text // digest is markdown, not JSON
   if (agentId === 'dev_agent') return text // raw .ts source, or "NEEDS_HUMAN ..."
-  // Other agents speak JSON; tolerate a fenced code block
+  // Other agents speak JSON; tolerate fences and any prose around the object
+  return extractJson(text)
+}
+
+// Models (and the claude CLI itself on cold start) sometimes wrap JSON in
+// prose or warning lines — take the outermost {...} instead of failing.
+export function extractJson(text: string): any {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
-  return JSON.parse(cleaned)
+  try { return JSON.parse(cleaned) } catch {}
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1))
+  throw new Error(`no JSON object in output: ${cleaned.slice(0, 80)}`)
 }

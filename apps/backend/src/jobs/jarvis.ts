@@ -5,6 +5,7 @@
 // exercisable offline.
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { extractJson } from '../workers/worker_router.js'
 import { db } from '../core/database.js'
 import { AGENT_MODE, SEND_MODE, DAILY_TOKEN_BUDGET_USD } from '../core/config.js'
 import { spentToday } from '../core/ledger.js'
@@ -137,9 +138,8 @@ export async function handleJarvis(message: string): Promise<{ reply: string; ac
       'claude', ['-p', prompt, '--output-format', 'json', '--model', 'claude-haiku-4-5-20251001'],
       { timeout: 60_000, maxBuffer: 1024 * 1024 },
     )
-    const wrapper = JSON.parse(stdout)
-    const cleaned = String(wrapper.result ?? '').trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
-    try { parsed = JSON.parse(cleaned) } catch { parsed = { reply: cleaned || 'I did not catch that.', action: null } }
+    const wrapper = extractJson(stdout)
+    try { parsed = extractJson(String(wrapper.result ?? '')) } catch { parsed = { reply: String(wrapper.result ?? '').trim() || 'I did not catch that.', action: null } }
   } else {
     parsed = dryRunJarvis(message, state)
   }
