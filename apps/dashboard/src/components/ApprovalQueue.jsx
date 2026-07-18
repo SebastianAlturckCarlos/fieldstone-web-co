@@ -22,7 +22,7 @@ export function ApprovalQueue({ approvals, onChanged }) {
       </h2>
       {approvals.length === 0 && (
         <p className="font-mono text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-          Queue clear. Run a tick to draft more outreach.
+          Queue clear — the engine drafts autonomously as leads arrive.
         </p>
       )}
       <ul className="space-y-2">
@@ -59,6 +59,21 @@ export function ApprovalQueue({ approvals, onChanged }) {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {d.consult && (
+                  <div>
+                    <div className="label text-[9px] mb-1.5">
+                      Sales Rep consult — click-through {d.consult.click_score}/100
+                    </div>
+                    {d.consult.notes?.length > 0 && (
+                      <ul className="space-y-1 font-mono text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                        {d.consult.notes.map((n, i) => <li key={i}>· {n}</li>)}
+                      </ul>
+                    )}
+                    <p className="mt-1 font-mono text-[10px]" style={{ color: 'var(--color-muted-foreground)', opacity: 0.7 }}>
+                      Researcher audited · CMO drafted · CEO scored {d.qa_score} · Sales Rep consulted — you decide.
+                    </p>
                   </div>
                 )}
                 <p className="whitespace-pre-wrap rounded-lg p-3 text-sm"

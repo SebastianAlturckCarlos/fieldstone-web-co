@@ -4,6 +4,8 @@ import { assertUnderBudget, assertLeadUnderBudget, BudgetExceeded } from './ledg
 import { emitEvent } from './events.js'
 import { personalDemoLink } from './demo_link.js'
 import { commitEpisodicMemory } from './memory.js'
+import { fetchSiteBundle } from './site_fetch.js'
+import { AGENT_MODE } from './config.js'
 
 const BATCH_SIZE = 5
 const MAX_QA_LOOPS = 3
@@ -50,18 +52,25 @@ export async function tick() {
       assertUnderBudget()
       assertLeadUnderBudget(lead.id)
 
-      // 1. Audit (local/mocked — free)
-      const audit = await runAgent('researcher_agent', {
+      // 1. Audit — Researcher works from the REAL site (fetched here) outside
+      //    dry-run; an unreachable site is passed through as evidence, since
+      //    that's the most expensive flaw a trades business can have.
+      const sitePayload: any = {
         company_name: lead.company_name, website_url: lead.website_url, trade: lead.trade,
-      }, lead.id)
+      }
+      if (AGENT_MODE !== 'dry-run') sitePayload.site = await fetchSiteBundle(lead.website_url)
+      const audit = await runAgent('researcher_agent', sitePayload, lead.id)
       if (!audit.flaws?.length) { transition(lead, 'failed', { failReason: 'no_flaws' }); continue }
       transition(lead, 'audited', { audit })
 
-      // 2. Draft <-> QA loop
+      // 2. Creation <-> review loop: CMO drafts from the Researcher's
+      //    evidence, CEO scores against the rubric, rejection feedback goes
+      //    straight back to the CMO. Distinct roles, real consultation.
+      const demo_link = personalDemoLink(lead, audit)
       let draft: any, verdict: any, feedback = ''
       for (let i = 0; i < MAX_QA_LOOPS; i++) {
         assertLeadUnderBudget(lead.id)
-        draft = await runAgent('cmo_agent', { audit, feedback, demo_link: personalDemoLink(lead, audit) }, lead.id)
+        draft = await runAgent('cmo_agent', { audit, feedback, demo_link }, lead.id)
         verdict = await runAgent('ceo_agent', { draft, audit }, lead.id)
         if (verdict.approved) break
         feedback = verdict.feedback
@@ -70,9 +79,37 @@ export async function tick() {
       }
       if (!verdict.approved) { transition(lead, 'failed', { failReason: 'qa_exhausted' }); continue }
 
-      // 3. Queue for the human approval gate
-      db.prepare(`INSERT INTO outreach_emails (lead_id, subject, body, qa_score) VALUES (?, ?, ?, ?)`)
-        .run(lead.id, draft.subject, draft.body, verdict.score)
+      // 3. Sales Rep consult — conversion review of the CEO-approved draft.
+      //    A weak click score buys ONE more CMO revision (with the Sales
+      //    Rep's notes as feedback) before the human sees it. Consult
+      //    failures never fail the lead; the draft is already QA-approved.
+      let consult: any = null
+      try {
+        consult = await runAgent('sales_consult', {
+          draft, company_name: lead.company_name, trade: lead.trade, demo_link,
+        }, lead.id)
+        if (consult && consult.click_score < 60) {
+          console.log(`  [${lead.company_name}] consult ${consult.click_score} — one conversion revision`)
+          const revised = await runAgent('cmo_agent', {
+            audit, feedback: `Sales Rep conversion notes: ${consult.notes?.join(' | ')}`, demo_link,
+          }, lead.id)
+          const reVerdict = await runAgent('ceo_agent', { draft: revised, audit }, lead.id)
+          if (reVerdict.approved) {
+            draft = revised
+            verdict = reVerdict
+            consult = await runAgent('sales_consult', {
+              draft, company_name: lead.company_name, trade: lead.trade, demo_link,
+            }, lead.id)
+          }
+        }
+        if (consult?.subject_alt) draft.subject = consult.subject_alt
+      } catch (err) {
+        console.log(`  [${lead.company_name}] consult skipped: ${(err as Error).message.slice(0, 80)}`)
+      }
+
+      // 4. Queue for the human approval gate
+      db.prepare(`INSERT INTO outreach_emails (lead_id, subject, body, qa_score, consult_json) VALUES (?, ?, ?, ?, ?)`)
+        .run(lead.id, draft.subject, draft.body, verdict.score, consult ? JSON.stringify(consult) : null)
       transition(lead, 'drafted')
     } catch (err) {
       if (err instanceof BudgetExceeded) {

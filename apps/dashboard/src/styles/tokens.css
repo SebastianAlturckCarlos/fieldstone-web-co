@@ -35,7 +35,7 @@ body {
   background: linear-gradient(160deg, rgba(14, 18, 35, 0.62), rgba(2, 6, 23, 0.72));
   border: 1px solid var(--color-border);
   border-radius: 16px;
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(14px);
   box-shadow: 0 0 40px rgba(14, 165, 233, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .panel--active {
@@ -66,7 +66,7 @@ body {
 }
 @keyframes grid-drift { from { background-position: 0 0; } to { background-position: 0 56px; } }
 
-.bg-glow { position: absolute; border-radius: 50%; filter: blur(90px); }
+.bg-glow { position: absolute; border-radius: 50%; filter: blur(64px); }
 .bg-glow--core {
   width: 60vw; height: 60vw; left: 20vw; top: 8vh;
   background: radial-gradient(circle, rgba(14, 165, 233, 0.16), transparent 65%);
@@ -80,7 +80,7 @@ body {
 @keyframes glow-breathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
 
 /* Deep-space nebulae — slow-drifting colored gas clouds */
-.nebula { position: absolute; border-radius: 50%; filter: blur(70px); mix-blend-mode: screen; }
+.nebula { position: absolute; border-radius: 50%; filter: blur(52px); mix-blend-mode: screen; }
 .nebula--indigo {
   width: 55vw; height: 38vw; left: -14vw; top: -8vh;
   background: radial-gradient(ellipse, rgba(79, 70, 229, 0.16), rgba(30, 27, 75, 0.06) 55%, transparent 75%);
@@ -161,6 +161,21 @@ body {
   .bg-grid, .bg-glow, .starfield, .starfield::before, .nebula, .shooting-star { animation: none; }
   .shooting-star { display: none; }
 }
+
+/* Perf-lean mode — set on <html> by the SynapseCore quality governor when the
+   machine can't hold frame rate. The lethal combination on weak GPUs is
+   backdrop-filter panels sampling ANIMATED backdrops: every panel re-blurs
+   the whole screen behind it every frame. Lean mode freezes the backdrop and
+   drops the per-panel blur; the layered gradients keep the Deep Field look. */
+.perf-lean .panel {
+  backdrop-filter: none;
+  background: linear-gradient(160deg, rgba(14, 18, 35, 0.94), rgba(2, 6, 23, 0.96));
+}
+.perf-lean .bg-grid, .perf-lean .bg-glow, .perf-lean .nebula,
+.perf-lean .starfield, .perf-lean .starfield::before { animation: none; }
+.perf-lean .shooting-star { display: none; }
+.perf-lean .scanlines { display: none; }
+.perf-lean .nebula, .perf-lean .bg-glow { filter: blur(36px); }
 
 /* Live data enters with a stagger — never instant pops */
 @keyframes feed-in {

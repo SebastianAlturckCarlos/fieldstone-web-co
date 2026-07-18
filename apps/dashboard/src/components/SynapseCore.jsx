@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
@@ -7,15 +7,60 @@ import { synapseBus } from '../lib/synapseBus.js'
 
 const NODE_COUNT = 420
 const PULSE_COUNT = 24
-const NEBULA_COUNT = 1200
 const RADIUS = 2.0
 const LINK_DIST = 0.55 // max neighbor distance for a synapse
 
-// Volumetric inner cloud — uniform random points inside a sphere
+// ── Adaptive quality ────────────────────────────────────────────────────────
+// Tier 2: full cinema (bloom/noise/vignette, nebula, DPR≤2, AA)
+// Tier 1: lean — no fullscreen post passes, half nebula, DPR 1. The post
+//         chain is the single biggest cost; dropping it keeps everything
+//         animated on integrated GPUs.
+// Tier 0: static frame — for software WebGL (SwiftShader etc), where even
+//         one animated pass is seconds-per-frame.
+// The governor measures real frame times and steps down until usable; the
+// choice persists so a slow machine never re-thrashes on reload. Tier<2 also
+// sets .perf-lean on <html>, which turns off backdrop-filter + bg animation
+// (each blurred panel re-samples the animated backdrop EVERY frame — that
+// combination is what melted weak GPUs, not the sphere's own geometry).
+const TIER_KEY = 'synapse-quality-tier'
+
+function initialTier() {
+  const saved = Number(localStorage.getItem(TIER_KEY))
+  return Number.isInteger(saved) && saved >= 0 && saved <= 2 ? saved : 2
+}
+
+function applyLeanClass(tier) {
+  document.documentElement.classList.toggle('perf-lean', tier < 2)
+}
+
+function detectSoftwareGL(gl) {
+  try {
+    const ctx = gl.getContext()
+    const ext = ctx.getExtension('WEBGL_debug_renderer_info')
+    const renderer = ext ? ctx.getParameter(ext.UNMASKED_RENDERER_WEBGL) : ''
+    return /swiftshader|llvmpipe|software|basic render/i.test(renderer)
+  } catch { return false }
+}
+
+// Rolling frame-time monitor. Reports ~1×/s; parent decides on downgrades.
+function FrameGovernor({ onSample }) {
+  const acc = useRef({ time: 0, frames: 0 })
+  useFrame((_, dt) => {
+    acc.current.time += dt
+    acc.current.frames++
+    if (acc.current.time >= 1) {
+      onSample(acc.current.frames / acc.current.time)
+      acc.current.time = 0
+      acc.current.frames = 0
+    }
+  })
+  return null
+}
+
+// ── Geometry (unchanged from the blueprint spec) ────────────────────────────
 function nebulaCloud(count, radius) {
   const pts = new Float32Array(count * 3)
   for (let i = 0; i < count; i++) {
-    // rejection-free: direction * cbrt(u) * r gives uniform density
     const u = Math.random(), v = Math.random(), w = Math.random()
     const theta = 2 * Math.PI * u
     const phi = Math.acos(2 * v - 1)
@@ -29,7 +74,6 @@ function nebulaCloud(count, radius) {
   return pts
 }
 
-// Thin orbital ring in the XZ plane
 function ringPoints(radius, segments = 128) {
   const pts = new Float32Array(segments * 3)
   for (let i = 0; i < segments; i++) {
@@ -39,7 +83,6 @@ function ringPoints(radius, segments = 128) {
   return pts
 }
 
-// Even node distribution — Fibonacci sphere
 function fibonacciSphere(count, radius) {
   const pts = new Float32Array(count * 3)
   const phi = Math.PI * (3 - Math.sqrt(5))
@@ -52,7 +95,6 @@ function fibonacciSphere(count, radius) {
   return pts
 }
 
-// Precompute synapses: 3 nearest neighbors within LINK_DIST, deduped
 function buildEdges(nodes) {
   const v = i => new THREE.Vector3(nodes[i * 3], nodes[i * 3 + 1], nodes[i * 3 + 2])
   const edges = []
@@ -72,16 +114,17 @@ function buildEdges(nodes) {
   return edges
 }
 
-function NeuralMesh() {
+function NeuralMesh({ tier }) {
   const spin = useRef()
   const pulseGeo = useRef()
   const flashMat = useRef()
   const ringA = useRef()
   const ringB = useRef()
 
+  const nebulaCount = tier === 2 ? 1200 : 500
   const nodes = useMemo(() => fibonacciSphere(NODE_COUNT, RADIUS), [])
   const edges = useMemo(() => buildEdges(nodes), [nodes])
-  const nebula = useMemo(() => nebulaCloud(NEBULA_COUNT, 1.45), [])
+  const nebula = useMemo(() => nebulaCloud(nebulaCount, 1.45), [nebulaCount])
   const ring = useMemo(() => ringPoints(2.65), [])
 
   const linePositions = useMemo(() => {
@@ -101,7 +144,6 @@ function NeuralMesh() {
     })), [edges])
   const pulsePositions = useMemo(() => new Float32Array(PULSE_COUNT * 3), [])
 
-  // Business events -> burst: re-seed n pulses at one node so light radiates outward
   useEffect(() => synapseBus.on('pulse', n => {
     const origin = Math.floor(Math.random() * NODE_COUNT)
     const local = edges.map((e, i) => (e[0] === origin || e[1] === origin) ? i : -1)
@@ -113,7 +155,6 @@ function NeuralMesh() {
       p.t = 0
       p.speed = 1.6 + Math.random() * 0.8 // bursts travel faster
     }
-    // Energy surge: the shell flashes and decays back down in useFrame
     if (flashMat.current) flashMat.current.opacity = Math.min(0.32, 0.1 + n * 0.045)
   }), [edges, pulses])
 
@@ -121,13 +162,11 @@ function NeuralMesh() {
     spin.current.rotation.y += dt * 0.04
     spin.current.rotation.x += dt * 0.015
 
-    // Counter-rotating orbital rings + slow breathing
     const t = state.clock.elapsedTime
     if (ringA.current) { ringA.current.rotation.y = t * 0.12; ringA.current.rotation.x = 0.5 }
     if (ringB.current) { ringB.current.rotation.y = -t * 0.08; ringB.current.rotation.x = -0.35; ringB.current.rotation.z = 0.4 }
     spin.current.scale.setScalar(1 + Math.sin(t * 0.5) * 0.015)
 
-    // Flash decay — energy surge fades over ~1s
     if (flashMat.current && flashMat.current.opacity > 0.02)
       flashMat.current.opacity = Math.max(0.02, flashMat.current.opacity - dt * 0.35)
 
@@ -136,7 +175,7 @@ function NeuralMesh() {
       if (p.t >= 1) {
         p.t = 0
         p.edge = Math.floor(Math.random() * edges.length)
-        p.speed = 0.7 + Math.random() * 1.1 // bursts decay back to ambient speed
+        p.speed = 0.7 + Math.random() * 1.1
       }
       const [a, b] = edges[p.edge]
       for (let c = 0; c < 3; c++) {
@@ -147,27 +186,27 @@ function NeuralMesh() {
     pulseGeo.current.attributes.position.needsUpdate = true // GPU re-upload — required
   })
 
+  // Without the bloom pass (tier<2), brighten materials so the glow survives
+  const glowBoost = tier === 2 ? 1 : 1.6
+
   return (
     <group ref={spin}>
-      {/* Neuron nodes */}
       <points>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[nodes, 3]} />
         </bufferGeometry>
-        <pointsMaterial color="#22D3EE" size={0.035} sizeAttenuation transparent
-          depthWrite={false} blending={THREE.AdditiveBlending} />
+        <pointsMaterial color="#22D3EE" size={0.035 * (tier === 2 ? 1 : 1.15)} sizeAttenuation transparent
+          opacity={Math.min(1, 0.9 * glowBoost)} depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
 
-      {/* Synaptic connections — one draw call */}
       <lineSegments>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[linePositions, 3]} />
         </bufferGeometry>
-        <lineBasicMaterial color="#0EA5E9" transparent opacity={0.12}
+        <lineBasicMaterial color="#0EA5E9" transparent opacity={0.12 * glowBoost}
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </lineSegments>
 
-      {/* Traveling signal pulses */}
       <points>
         <bufferGeometry ref={pulseGeo}>
           <bufferAttribute attach="attributes-position" args={[pulsePositions, 3]} />
@@ -176,7 +215,6 @@ function NeuralMesh() {
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
 
-      {/* Inner nebula — volumetric depth */}
       <points>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[nebula, 3]} />
@@ -185,34 +223,30 @@ function NeuralMesh() {
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
 
-      {/* Energy-surge shell — flashes on synapseBus bursts, decays in useFrame */}
       <mesh>
         <sphereGeometry args={[2.06, 32, 32]} />
         <meshBasicMaterial ref={flashMat} color="#38BDF8" transparent opacity={0.02}
           depthWrite={false} side={THREE.BackSide} blending={THREE.AdditiveBlending} />
       </mesh>
 
-      {/* Counter-rotating orbital rings */}
       <lineLoop ref={ringA}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[ring, 3]} />
         </bufferGeometry>
-        <lineBasicMaterial color="#22D3EE" transparent opacity={0.18}
+        <lineBasicMaterial color="#22D3EE" transparent opacity={0.18 * glowBoost}
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </lineLoop>
       <lineLoop ref={ringB}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[ring, 3]} />
         </bufferGeometry>
-        <lineBasicMaterial color="#0EA5E9" transparent opacity={0.12}
+        <lineBasicMaterial color="#0EA5E9" transparent opacity={0.12 * glowBoost}
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </lineLoop>
     </group>
   )
 }
 
-// Outer parallax rig: the sphere leans toward the pointer AND shifts in space,
-// so it reads as an object floating in front of the screen, not a texture on it.
 function ParallaxRig({ children }) {
   const rig = useRef()
   const { pointer } = useThree()
@@ -225,52 +259,98 @@ function ParallaxRig({ children }) {
   return <group ref={rig}>{children}</group>
 }
 
-// Warp-in: camera dollies from deep space to its seat over ~2s on load
-function WarpIn({ reduced }) {
+function WarpIn({ still }) {
   const { camera } = useThree()
   const t = useRef(0)
   useFrame((_, dt) => {
-    if (reduced) { camera.position.z = 5.4; return }
+    if (still) { camera.position.z = 5.4; return }
     if (t.current >= 1) return
     t.current = Math.min(1, t.current + dt / 2.0)
-    const eased = 1 - Math.pow(1 - t.current, 4) // expo-ish out
+    const eased = 1 - Math.pow(1 - t.current, 4)
     camera.position.z = 14 - (14 - 5.4) * eased
   })
   return null
 }
 
-export function SynapseCore() {
+export function SynapseCore({ onActivate }) {
   const reduced = typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const [tier, setTier] = useState(initialTier)
+  const [fps, setFps] = useState(null)
+  const [hidden, setHidden] = useState(document.hidden)
+  const slowSamples = useRef(0)
+
+  useEffect(() => { applyLeanClass(tier); localStorage.setItem(TIER_KEY, String(tier)) }, [tier])
+  useEffect(() => {
+    const onVis = () => setHidden(document.hidden)
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
+  const onSample = useCallback(avgFps => {
+    setFps(Math.round(avgFps))
+    // Two consecutive slow seconds -> drop a tier. 24fps is the floor of
+    // "reads as motion"; below it the cinematic frame does more harm than good.
+    if (avgFps < 24) {
+      if (++slowSamples.current >= 2) {
+        slowSamples.current = 0
+        setTier(t => Math.max(0, t - 1))
+      }
+    } else {
+      slowSamples.current = 0
+    }
+  }, [])
+
+  const still = reduced || tier === 0 || hidden
+
   return (
-    // No clipping circle, no border — the sphere floats free in the page's space.
-    <div className="relative w-full h-[480px] lg:h-[540px]">
+    <div
+      className="relative w-full h-[480px] lg:h-[540px] cursor-pointer"
+      onClick={onActivate}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter') onActivate?.() }}
+      aria-label="Enter the Synapse — spatial agent view"
+    >
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-center pointer-events-none">
         <h3 className="label glow-text" style={{ color: 'var(--color-accent)' }}>Synapse Core</h3>
         <p className="font-mono mt-1 text-[10px]" style={{ color: 'var(--color-muted-foreground)' }}>
-          Real-Time Vector Sync
+          Real-Time Vector Sync · click to enter
         </p>
       </div>
+      <div className="absolute bottom-2 right-3 z-10 font-mono text-[9px] pointer-events-none"
+        style={{ color: 'var(--color-muted-foreground)', opacity: 0.7 }}>
+        q{tier}{fps !== null && !still ? ` · ${fps}fps` : tier === 0 ? ' · static' : ''}
+      </div>
+      {/* key={tier} — antialias/dpr are construction-time options, so a tier
+          change rebuilds the canvas cleanly */}
       <Canvas
-        gl={{ antialias: true, alpha: true }} // antialias only works at construction
-        dpr={[1, 2]}
-        camera={{ position: [0, 0, 14], fov: 52 }}
-        frameloop={reduced ? 'demand' : 'always'}
+        key={tier}
+        gl={{ antialias: tier === 2, alpha: true }}
+        dpr={tier === 2 ? [1, 2] : 1}
+        camera={{ position: [0, 0, still ? 5.4 : 14], fov: 52 }}
+        frameloop={still ? 'demand' : 'always'}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping
           gl.outputColorSpace = THREE.SRGBColorSpace
+          // Software WebGL can't do this scene at speed no matter what we
+          // trim — jump straight to the static frame instead of thrashing.
+          if (detectSoftwareGL(gl) && tier > 0) setTier(0)
         }}
       >
         <ambientLight intensity={0.4} />
-        <WarpIn reduced={reduced} />
+        <WarpIn still={still} />
+        {!still && <FrameGovernor onSample={onSample} />}
         <ParallaxRig>
-          <NeuralMesh />
+          <NeuralMesh tier={tier} />
         </ParallaxRig>
-        <EffectComposer>
-          <Bloom luminanceThreshold={0.12} intensity={1.7} mipmapBlur />
-          <Noise premultiply blendFunction={BlendFunction.SCREEN} opacity={0.05} />
-          <Vignette eskil={false} offset={0.14} darkness={0.7} />
-        </EffectComposer>
+        {tier === 2 && (
+          <EffectComposer>
+            <Bloom luminanceThreshold={0.12} intensity={1.7} mipmapBlur />
+            <Noise premultiply blendFunction={BlendFunction.SCREEN} opacity={0.05} />
+            <Vignette eskil={false} offset={0.14} darkness={0.7} />
+          </EffectComposer>
+        )}
       </Canvas>
     </div>
   )

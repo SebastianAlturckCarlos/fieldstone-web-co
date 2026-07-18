@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Play, Loader2, Zap } from 'lucide-react'
-import { fetchState, postAction, openEventStream } from './lib/api.js'
+import { Zap, Crown, Sparkles } from 'lucide-react'
+import { fetchState, openEventStream } from './lib/api.js'
 import { SynapseCore } from './components/SynapseCore.jsx'
 import { AgentRoster } from './components/AgentRoster.jsx'
 import { AgentDetail } from './components/AgentDetail.jsx'
 import { ActivityFeed } from './components/ActivityFeed.jsx'
-import { ApprovalQueue } from './components/ApprovalQueue.jsx'
 import { KpiTile } from './components/KpiTile.jsx'
 import { GrowthScreen } from './components/GrowthScreen.jsx'
 import { PipelineScreen } from './components/PipelineScreen.jsx'
+import { CEOCommand } from './components/CEOCommand.jsx'
+import { ImmersionView } from './components/ImmersionView.jsx'
+import { JarvisPanel } from './components/JarvisPanel.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
   const [feed, setFeed] = useState([])
   const [alert, setAlert] = useState(null)
-  const [ticking, setTicking] = useState(false)
   const [offline, setOffline] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState(null)
+  const [showCeo, setShowCeo] = useState(false)
+  const [immersed, setImmersed] = useState(false)
+  const [jarvis, setJarvis] = useState(false)
   const [view, setView] = useState('mission') // 'mission' | 'pipeline' | 'growth'
   const keyRef = useRef(0)
 
@@ -42,19 +46,15 @@ export default function App() {
     return () => { close(); clearInterval(poll) }
   }, [refresh])
 
-  async function runTick() {
-    setTicking(true)
-    setAlert(null)
-    try {
-      const res = await postAction('/api/tick')
-      if (res.paused) setAlert(res.paused)
-      await refresh()
-    } finally {
-      setTicking(false)
-    }
-  }
+  // Roster click: the CEO opens the command console (the human's one job);
+  // workers open their detail panels.
+  const onSelectRosterAgent = useCallback(id => {
+    if (id === 'ceo_agent') setShowCeo(true)
+    else setSelectedAgent(id)
+  }, [])
 
   const funnel = state?.funnel ?? {}
+  const pendingDecisions = (state?.approvals?.length ?? 0) + (state?.replyQueue?.length ?? 0)
 
   return (
     <div className="mx-auto min-h-screen max-w-7xl px-4 py-4 flex flex-col gap-4">
@@ -84,7 +84,7 @@ export default function App() {
         {state?.autoTick?.enabled && (
           <span className="flex items-center gap-1 font-mono text-[10px] rounded-full border px-2 py-0.5 uppercase"
             style={{ borderColor: 'rgba(34,197,94,0.4)', color: 'var(--color-success)' }}>
-            <Zap size={10} /> auto · {Math.round(state.autoTick.intervalMs / 1000)}s
+            <Zap size={10} /> autonomous · {Math.round(state.autoTick.intervalMs / 1000)}s
           </span>
         )}
         <nav className="ml-4 flex gap-1 font-mono text-xs">
@@ -104,13 +104,21 @@ export default function App() {
           </span>
         )}
         <button
-          onClick={runTick}
-          disabled={ticking || offline}
-          className="ml-auto flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-transform duration-150 active:scale-[0.97] disabled:opacity-50"
+          onClick={() => setJarvis(j => !j)}
+          className="ml-auto flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-xs uppercase tracking-wider transition-colors duration-150"
+          style={jarvis
+            ? { borderColor: 'rgba(34,211,238,0.5)', color: 'var(--color-accent)' }
+            : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+        >
+          <Sparkles size={13} /> JARVIS
+        </button>
+        <button
+          onClick={() => setShowCeo(true)}
+          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-transform duration-150 active:scale-[0.97]"
           style={{ background: 'var(--color-primary)', color: '#020617' }}
         >
-          {ticking ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-          {ticking ? 'Running…' : 'Run tick'}
+          <Crown size={14} />
+          CEO{pendingDecisions > 0 ? ` (${pendingDecisions})` : ''}
         </button>
       </header>
 
@@ -119,8 +127,7 @@ export default function App() {
           ⚠ {alert}
         </div>
       )}
-
-      {state?.sendPaused && view !== 'pipeline' && (
+      {state?.sendPaused && (
         <div className="panel px-4 py-2 font-mono text-sm" style={{ color: 'var(--color-warning)' }}>
           ⚠ {state.sendPaused}
         </div>
@@ -128,10 +135,21 @@ export default function App() {
 
       {view === 'mission' ? (
         <main className="grid flex-1 gap-4 lg:grid-cols-[240px_1fr_300px]">
-          <AgentRoster roster={state?.roster ?? []} onSelect={setSelectedAgent} />
+          <AgentRoster roster={state?.roster ?? []} onSelect={onSelectRosterAgent} />
           <div className="flex flex-col gap-4 min-w-0">
-            <SynapseCore />
-            <ApprovalQueue approvals={state?.approvals ?? []} onChanged={refresh} />
+            <SynapseCore onActivate={() => setImmersed(true)} />
+            {pendingDecisions > 0 && (
+              <button onClick={() => setShowCeo(true)}
+                className="panel panel--active flex items-center gap-3 px-4 py-3 text-left transition-transform duration-150 active:scale-[0.99]">
+                <Crown size={15} style={{ color: 'var(--color-accent)' }} />
+                <span className="font-display text-sm">
+                  {pendingDecisions} decision{pendingDecisions === 1 ? '' : 's'} waiting in the CEO console
+                </span>
+                <span className="ml-auto font-mono text-[10px] uppercase" style={{ color: 'var(--color-muted-foreground)' }}>
+                  open →
+                </span>
+              </button>
+            )}
           </div>
           <ActivityFeed items={feed} />
         </main>
@@ -145,9 +163,24 @@ export default function App() {
         </main>
       )}
 
+      {immersed && (
+        <ImmersionView
+          roster={state?.roster ?? []}
+          onSelectAgent={setSelectedAgent}
+          onOpenCeo={() => setShowCeo(true)}
+          onClose={() => setImmersed(false)}
+        />
+      )}
+
+      {showCeo && (
+        <CEOCommand state={state} onChanged={refresh} onClose={() => setShowCeo(false)} />
+      )}
+
       {selectedAgent && (
         <AgentDetail agentId={selectedAgent} onClose={() => setSelectedAgent(null)} />
       )}
+
+      {jarvis && <JarvisPanel onChanged={refresh} onClose={() => setJarvis(false)} />}
 
       <footer className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <KpiTile label="Pending" value={funnel.pending ?? '–'} />

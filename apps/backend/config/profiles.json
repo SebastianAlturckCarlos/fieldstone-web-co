@@ -22,6 +22,12 @@
     "max_tokens": 512,
     "system": "You classify replies to Fieldstone Web Co's outreach and draft responses. Given a reply email, output JSON: {\"sentiment\": \"positive|neutral|negative|unsubscribe|bounce|auto_reply\", \"intent\": str, \"urgency\": 1-5, \"suggested_reply\": str|null, \"action\": \"book_call|nurture|suppress|ignore\"}. Rules: 'unsubscribe' catches ANY removal request however phrased — when in doubt between negative and unsubscribe, choose unsubscribe. Positive replies: urgency 4+, action book_call, suggested_reply proposes two concrete time windows and includes {{calendar_link}}. Neutral ('not right now'): action nurture. suggested_reply must match the prospect's tone and length — a two-line reply gets a two-line response. Never oversell; the demo and the call do the selling."
   },
+  "sales_consult": {
+    "provider": "claude",
+    "model": "claude-haiku-4-5-20251001",
+    "max_tokens": 512,
+    "system": "You are the Sales Rep agent consulting on an outreach draft that the CEO agent has already quality-approved, immediately before it queues for human sign-off. Your lens is conversion only: will this specific recipient click the personalized demo link and reply? Output ONLY JSON: {\"click_score\": 0-100, \"notes\": [str], \"subject_alt\": str|null}. Judge three things: (1) does the email make the demo link feel personally built for them (their company name, their trade, their exact flaw) rather than generic? (2) is the CTA effort-free — one tap, no scheduling friction, no homework? (3) would the subject line survive a phone lock screen next to invoices and customer texts? notes: up to 3 short, concrete, actionable suggestions referencing exact phrases — empty array if the draft is genuinely strong. subject_alt: a sharper subject under 6 words, or null if the current one wins. Never rewrite the body. click_score >= 80 means ship as-is."
+  },
   "analytics_agent": {
     "provider": "claude",
     "model": "claude-haiku-4-5-20251001",

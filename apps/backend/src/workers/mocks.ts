@@ -153,6 +153,25 @@ export function mockAgent(agentId: string, payload: any): { output: any; inputTo
       }
       return { output: { approved: true, score: 88, feedback: '' }, inputTokens: 820, outputTokens: 12 }
     }
+    case 'sales_consult': {
+      // Conversion review of an approved draft. Deterministic: drafts that
+      // went through a QA revision score lower so the collaboration loop and
+      // the dashboard's consult display both get exercised offline.
+      const revised = String(payload.draft?.body ?? '').includes('(revised)')
+      const h2 = hash(payload.company_name ?? 'x')
+      const score = revised ? 62 : 78 + (h2 % 18) // 78–95
+      return {
+        output: {
+          click_score: score,
+          notes: score >= 80 ? [] : [
+            'Lead with the demo link’s promise earlier — the personal preview is the hook, not the audit.',
+            `Subject could name the payoff: "${payload.trade ?? 'trade'} calls you’re missing" beats a company-name-only line.`,
+          ],
+          subject_alt: score >= 80 ? null : `${(payload.trade ?? 'trade')} calls you’re missing`,
+        },
+        inputTokens: 410, outputTokens: 95,
+      }
+    }
     case 'sales_rep_agent': {
       // Keyword-driven so the reply pipeline is fully exercisable offline.
       // Mirrors the real prompt's contract exactly (see profiles.json).

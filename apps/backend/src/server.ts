@@ -14,6 +14,7 @@ import { sendValidated, sendPausedReason } from './jobs/send.js'
 import { classifyReply, recordEngagement, resumeSends, sendFollowup, dismissFollowup } from './jobs/replies.js'
 import { runDigest } from './jobs/digest.js'
 import { runDevAgentCycle } from './jobs/dev_agent.js'
+import { handleJarvis } from './jobs/jarvis.js'
 
 function readBody(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -61,8 +62,11 @@ async function runTickGuarded(source: string): Promise<{ ok: boolean; paused?: s
 }
 
 function getState() {
+  // sales_consult is the Sales Rep's second duty — attribute its runs to SLS
   const lastRuns = db.prepare(
-    `SELECT agent_id, MAX(ran_at) AS last FROM agent_runs GROUP BY agent_id`,
+    `SELECT CASE WHEN agent_id = 'sales_consult' THEN 'sales_rep_agent' ELSE agent_id END agent_id,
+            MAX(ran_at) AS last
+     FROM agent_runs GROUP BY 1`,
   ).all() as { agent_id: string; last: string }[]
   const lastBy = Object.fromEntries(lastRuns.map(r => [r.agent_id, r.last + 'Z']))
 
@@ -80,15 +84,17 @@ function getState() {
     funnel[r.s] = r.n
 
   const approvals = (db.prepare(
-    `SELECT o.id, o.lead_id, o.subject, o.body, o.qa_score, l.company_name, l.trade, l.city, l.audit_json
+    `SELECT o.id, o.lead_id, o.subject, o.body, o.qa_score, o.consult_json, l.company_name, l.trade, l.city, l.audit_json
      FROM outreach_emails o JOIN leads l ON l.id = o.lead_id
      WHERE o.approved_by IS NULL AND o.sent_at IS NULL AND l.lead_status = 'drafted'
      ORDER BY o.created_at`,
   ).all() as any[]).map(a => {
     let flaws: any[] = []
+    let consult: any = null
     try { flaws = (JSON.parse(a.audit_json ?? '{}').flaws ?? []).map((f: any) => ({ type: f.type, severity: f.severity, detail: f.detail })) } catch {}
-    const { audit_json, ...rest } = a
-    return { ...rest, flaws }
+    try { consult = a.consult_json ? JSON.parse(a.consult_json) : null } catch {}
+    const { audit_json, consult_json, ...rest } = a
+    return { ...rest, flaws, consult }
   })
 
   const today = db.prepare(
@@ -331,6 +337,24 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/api/send/resume') {
     resumeSends()
     return json(res, 200, { ok: true, state: getState() })
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/send/pause') {
+    db.prepare(`INSERT OR REPLACE INTO kv (k, v, updated_at) VALUES ('send_paused', 'manually paused from the CEO console', CURRENT_TIMESTAMP)`).run()
+    emitEvent('feed', { msg: 'sends paused (manual)', kind: 'alert' })
+    return json(res, 200, { ok: true, state: getState() })
+  }
+
+  // Sprint 6 — JARVIS: conversation with the engine, whitelisted actions only
+  if (req.method === 'POST' && url.pathname === '/api/jarvis') {
+    try {
+      const body = await readBody(req)
+      if (!body.message?.trim()) return json(res, 400, { error: 'expected { message }' })
+      const result = await handleJarvis(String(body.message).slice(0, 2000))
+      return json(res, 200, { ok: true, ...result, state: getState() })
+    } catch (err) {
+      return json(res, 500, { error: (err as Error).message })
+    }
   }
 
   if (req.method === 'POST' && url.pathname === '/api/digest') {

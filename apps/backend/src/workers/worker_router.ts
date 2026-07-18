@@ -11,6 +11,23 @@ const execFileAsync = promisify(execFile)
 const here = path.dirname(fileURLToPath(import.meta.url))
 const profiles = JSON.parse(readFileSync(path.join(here, '../../config/profiles.json'), 'utf-8'))
 
+// Probe Ollama at most once a minute — a dead socket shouldn't add latency
+// to every single agent call.
+let ollamaProbeUntil = 0
+let ollamaProbeResult = false
+async function ollamaUp(): Promise<boolean> {
+  if (Date.now() < ollamaProbeUntil) return ollamaProbeResult
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 800)
+    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: ctrl.signal })
+    clearTimeout(timer)
+    ollamaProbeResult = r.ok
+  } catch { ollamaProbeResult = false }
+  ollamaProbeUntil = Date.now() + 60_000
+  return ollamaProbeResult
+}
+
 function interpolate(system: string, vars: Record<string, string>): string {
   return system.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? `{{${k}}}`)
 }
@@ -34,8 +51,12 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
     return output
   }
 
-  // ---- researcher always routes to local Ollama outside dry-run ----
-  if (p.provider === 'ollama') {
+  // ---- researcher prefers local Ollama outside dry-run ($0 tokens) ----
+  // If Ollama isn't installed/running on this machine, claude-code mode
+  // falls through to the subscription path below — same hard-stop cost
+  // model, no lead ever fails just because Qwen is absent.
+  const useOllama = p.provider === 'ollama' && (AGENT_MODE !== 'claude-code' || await ollamaUp())
+  if (useOllama) {
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
       body: JSON.stringify({
@@ -60,13 +81,21 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
   // Costs nothing extra; when the subscription's usage limit is hit the CLI
   // errors out and the orchestrator pauses — it can never surprise-bill.
   if (AGENT_MODE === 'claude-code') {
+    // Ollama-profile agents falling through (no local Qwen) ride Haiku —
+    // the cheap tier, per the routing discipline. Never pass an Ollama
+    // model id to the claude CLI.
+    const model = p.provider === 'ollama' ? 'claude-haiku-4-5-20251001' : p.model
+    if (p.provider === 'ollama')
+      console.log(`  [router] Ollama unreachable — ${agentId} via claude-code (${model}, subscription)`)
     const prompt = `${system}\n\n---\nInput payload:\n${JSON.stringify(payload)}`
+    // No shell — with shell:true Windows concatenates args UNESCAPED, and a
+    // prompt full of newlines/quotes/JSON gets shredded by cmd.exe.
     const { stdout } = await execFileAsync(
-      'claude', ['-p', prompt, '--output-format', 'json', '--model', p.model],
-      { timeout: 180_000, maxBuffer: 10 * 1024 * 1024, shell: true },
+      'claude', ['-p', prompt, '--output-format', 'json', '--model', model],
+      { timeout: 180_000, maxBuffer: 10 * 1024 * 1024 },
     )
     const wrapper = JSON.parse(stdout)
-    recordRun(agentId, p.model, 'claude-code',
+    recordRun(agentId, model, 'claude-code',
       wrapper.usage?.input_tokens ?? 0, wrapper.usage?.output_tokens ?? 0,
       Date.now() - started, leadId)
     return parseAgentOutput(agentId, wrapper.result)

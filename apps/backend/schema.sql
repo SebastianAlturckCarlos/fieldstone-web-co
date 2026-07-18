@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS outreach_emails (
     opened_at TIMESTAMP,
     replied_at TIMESTAMP,
     reply_sentiment TEXT,
+    consult_json TEXT,                            -- Sales Rep click-through review of the draft
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

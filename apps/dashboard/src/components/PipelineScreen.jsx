@@ -113,7 +113,7 @@ function ReplyDesk({ leads, onChanged }) {
   )
 }
 
-function FollowupQueue({ replyQueue, onChanged }) {
+export function FollowupQueue({ replyQueue, onChanged }) {
   const [busyId, setBusyId] = useState(null)
   const [error, setError] = useState(null)
 
