@@ -31,6 +31,7 @@ Product mocks for prospects live under `/demo/` — unlisted, `noindex`, shared 
 | --- | --- | --- |
 | 1 — Operations Kickstart | `/demo/tier1-wedge/` | `src/demos/Tier1WedgeDemo.jsx` |
 | 2 — Growth CRM Suite | `/demo/tier2-crm/` | `src/demos/Tier2CRMDemo.jsx` |
+| 3 — Custom Enterprise Architecture | `/demo/tier3-enterprise/` | `src/demos/Tier3EnterpriseDemo.jsx` |
 
 Naming convention: route `demo/tier<N>-<product>/index.html` ↔ component
 `src/demos/Tier<N><Product>Demo.jsx` ↔ entry `src/demos/tier<N>-<product>.jsx`.

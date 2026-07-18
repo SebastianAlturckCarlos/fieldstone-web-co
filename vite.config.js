@@ -19,6 +19,7 @@ export default defineConfig(({ command }) => ({
         demoIndex: fileURLToPath(new URL('./demo/index.html', import.meta.url)),
         demoTier1Wedge: fileURLToPath(new URL('./demo/tier1-wedge/index.html', import.meta.url)),
         demoTier2Crm: fileURLToPath(new URL('./demo/tier2-crm/index.html', import.meta.url)),
+        demoTier3Enterprise: fileURLToPath(new URL('./demo/tier3-enterprise/index.html', import.meta.url)),
       },
     },
   },
