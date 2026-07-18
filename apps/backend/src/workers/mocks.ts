@@ -153,6 +153,35 @@ export function mockAgent(agentId: string, payload: any): { output: any; inputTo
       }
       return { output: { approved: true, score: 88, feedback: '' }, inputTokens: 820, outputTokens: 12 }
     }
+    case 'sales_rep_agent': {
+      // Keyword-driven so the reply pipeline is fully exercisable offline.
+      // Mirrors the real prompt's contract exactly (see profiles.json).
+      const text = String(payload.reply_text ?? '').toLowerCase()
+      const company = payload.company_name ?? 'there'
+      const calendar = payload.calendar_link ?? '{{calendar_link}}'
+      const has = (...words: string[]) => words.some(w => text.includes(w))
+
+      let out
+      if (has('stop', 'unsubscribe', 'remove me', 'take me off', 'do not contact', "don't contact"))
+        out = { sentiment: 'unsubscribe', intent: 'removal request', urgency: 1, suggested_reply: null, action: 'suppress' }
+      else if (has('out of office', 'auto-reply', 'automatic reply', 'on vacation'))
+        out = { sentiment: 'auto_reply', intent: 'automated response', urgency: 1, suggested_reply: null, action: 'ignore' }
+      else if (has('interested', 'call', 'sounds good', 'yes', 'let’s talk', "let's talk", 'demo', 'tell me more'))
+        out = {
+          sentiment: 'positive', intent: 'wants to see it', urgency: 4,
+          suggested_reply: `Great — two windows that work on my end: tomorrow 10–10:15am or Thursday 2–2:15pm. Grab whichever suits: ${calendar}. I'll bring the ${company} preview up on screen.`,
+          action: 'book_call',
+        }
+      else if (has('not right now', 'maybe later', 'next quarter', 'busy season', 'circle back'))
+        out = {
+          sentiment: 'neutral', intent: 'timing objection', urgency: 2,
+          suggested_reply: `Understood — busy season is exactly the problem it solves, but timing's yours. I'll check back in a few weeks.`,
+          action: 'nurture',
+        }
+      else
+        out = { sentiment: 'negative', intent: 'not interested', urgency: 1, suggested_reply: null, action: 'ignore' }
+      return { output: out, inputTokens: 380, outputTokens: 90 }
+    }
     case 'analytics_agent': {
       const { day, funnel, ledger, sent } = payload
       const total = Object.values(funnel as Record<string, number>).reduce((a: number, b: any) => a + b, 0)

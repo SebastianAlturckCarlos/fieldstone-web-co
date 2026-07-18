@@ -78,3 +78,28 @@ CREATE TABLE IF NOT EXISTS episodic_memory (
     memory_payload TEXT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Sprint 3: incoming replies + the Sales Rep's classification and suggested
+-- follow-up. A follow-up never sends itself — status flips to 'sent' only
+-- through the human-triggered endpoint.
+CREATE TABLE IF NOT EXISTS reply_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outreach_id INTEGER NOT NULL REFERENCES outreach_emails(id),
+    lead_id TEXT NOT NULL REFERENCES leads(id),
+    reply_text TEXT NOT NULL,
+    sentiment TEXT,
+    intent TEXT,
+    urgency INTEGER,
+    action TEXT,
+    suggested_reply TEXT,
+    status TEXT CHECK(status IN ('pending','sent','dismissed')) DEFAULT 'pending',
+    sent_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tiny operational flags (e.g. send_paused after a bounce spike).
+CREATE TABLE IF NOT EXISTS kv (
+    k TEXT PRIMARY KEY,
+    v TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

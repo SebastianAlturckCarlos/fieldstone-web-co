@@ -3,9 +3,20 @@
 // SEND_MODE=mock stamps the DB and goes nowhere; =resend delivers for real.
 import { db } from '../core/database.js'
 import {
-  SEND_MODE, RESEND_API_KEY, SEND_FROM, DAILY_SEND_CAP, BUSINESS_POSTAL_ADDRESS,
+  AGENT_MODE, SEND_MODE, RESEND_API_KEY, SEND_FROM, DAILY_SEND_CAP, BUSINESS_POSTAL_ADDRESS,
 } from '../core/config.js'
 import { emitEvent } from '../core/events.js'
+
+// Reserved/test domains (RFC 2606 + our seed data) — a real send to these
+// hard-bounces and dings sender reputation for nothing.
+function isTestAddress(email: string): boolean {
+  return /@([\w.-]+\.)?example\.(com|org|net)$|\.(test|invalid|localhost)$/i.test(email)
+}
+
+export function sendPausedReason(): string | null {
+  const row = db.prepare(`SELECT v FROM kv WHERE k = 'send_paused'`).get() as any
+  return row?.v ?? null
+}
 
 function complianceFooter(): string {
   const address = BUSINESS_POSTAL_ADDRESS ||
@@ -19,7 +30,7 @@ function sentToday(): number {
   ).get() as any).n
 }
 
-async function deliver(to: string, subject: string, body: string): Promise<string> {
+export async function deliver(to: string, subject: string, body: string): Promise<string> {
   if (SEND_MODE === 'mock') return `mock_${Date.now()}`
   if (SEND_MODE === 'resend') {
     if (!RESEND_API_KEY) throw new Error('SEND_MODE=resend requires RESEND_API_KEY')
@@ -39,6 +50,23 @@ export async function sendValidated(source = 'manual'): Promise<{ sent: number; 
   const skipped: string[] = []
   let sent = 0
 
+  // Bounce-spike circuit breaker (set by the reply/engagement job) — nothing
+  // real goes out until a human clears it via POST /api/send/resume.
+  const paused = sendPausedReason()
+  if (paused && SEND_MODE !== 'mock') {
+    emitEvent('feed', { msg: `sends paused: ${paused}`, kind: 'alert' })
+    return { sent: 0, skipped: [`sends paused: ${paused}`] }
+  }
+
+  // Canned dry-run copy must never reach a real inbox: the drafts contain
+  // template flaws that are fiction for any real company. Real delivery
+  // requires a real brain (claude-code or api mode) behind the drafts.
+  if (SEND_MODE === 'resend' && AGENT_MODE === 'dry-run') {
+    const msg = 'refusing real delivery of dry-run (canned) drafts — set AGENT_MODE=claude-code for real copy'
+    emitEvent('feed', { msg, kind: 'alert' })
+    return { sent: 0, skipped: [msg] }
+  }
+
   const queue = db.prepare(
     `SELECT o.id, o.subject, o.body, l.id AS lead_id, l.company_name, l.contact_email
      FROM outreach_emails o JOIN leads l ON l.id = o.lead_id
@@ -51,6 +79,12 @@ export async function sendValidated(source = 'manual'): Promise<{ sent: number; 
       skipped.push(`daily send cap (${DAILY_SEND_CAP}) reached — remaining queue holds until tomorrow`)
       emitEvent('feed', { msg: `send cap ${DAILY_SEND_CAP}/day reached — queue held`, kind: 'alert' })
       break
+    }
+    // Seed/test addresses hard-bounce — never let one near the real API
+    if (SEND_MODE === 'resend' && isTestAddress(q.contact_email)) {
+      db.prepare(`UPDATE leads SET lead_status='failed', fail_reason='test_address', updated_at=CURRENT_TIMESTAMP WHERE id = ?`).run(q.lead_id)
+      skipped.push(`${q.company_name}: test/example address — not sendable`)
+      continue
     }
     // Suppression is checked at dispatch, never earlier — the last line of defense
     const suppressed = db.prepare(`SELECT 1 FROM suppression WHERE email = ?`).get(q.contact_email)

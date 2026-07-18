@@ -10,9 +10,19 @@ import { AGENT_MODE, AUTO_TICK, AUTO_TICK_MS, DAILY_TOKEN_BUDGET_USD } from './c
 import { emitEvent, onEvent } from './core/events.js'
 import { tick } from './core/orchestrator.js'
 import { BudgetExceeded } from './core/ledger.js'
-import { sendValidated } from './jobs/send.js'
+import { sendValidated, sendPausedReason } from './jobs/send.js'
+import { classifyReply, recordEngagement, resumeSends, sendFollowup, dismissFollowup } from './jobs/replies.js'
 import { runDigest } from './jobs/digest.js'
 import { runDevAgentCycle } from './jobs/dev_agent.js'
+
+function readBody(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let raw = ''
+    req.on('data', c => { raw += c; if (raw.length > 1_000_000) reject(new Error('body too large')) })
+    req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}) } catch { reject(new Error('invalid JSON body')) } })
+    req.on('error', reject)
+  })
+}
 
 const PORT = Number(process.env.DASHBOARD_API_PORT ?? 4600)
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -86,14 +96,61 @@ function getState() {
      FROM agent_runs WHERE date(ran_at) = date('now')`,
   ).get() as any
 
+  // Pending follow-up drafts — the reply-side approval queue
+  const replyQueue = db.prepare(
+    `SELECT rd.id, rd.outreach_id, rd.reply_text, rd.sentiment, rd.intent, rd.urgency,
+            rd.action, rd.suggested_reply, rd.created_at, l.company_name, l.trade
+     FROM reply_drafts rd JOIN leads l ON l.id = rd.lead_id
+     WHERE rd.status = 'pending' AND rd.suggested_reply IS NOT NULL
+     ORDER BY rd.urgency DESC, rd.created_at`,
+  ).all()
+
   return {
     mode: AGENT_MODE,
-    roster, funnel, approvals,
+    roster, funnel, approvals, replyQueue,
+    sendPaused: sendPausedReason(),
     spend: { today: spentToday(), cap: DAILY_TOKEN_BUDGET_USD },
     tokens: { input: today.tin ?? 0, output: today.tout ?? 0, runs: today.runs ?? 0 },
     tickRunning,
     autoTick: { enabled: AUTO_TICK, intervalMs: AUTO_TICK_MS },
   }
+}
+
+// Pipeline screen: the 5 funnel stages with stage-to-stage conversion, plus
+// the dense lead table.
+function getPipeline() {
+  const counts: Record<string, number> = {}
+  for (const r of db.prepare(`SELECT lead_status s, COUNT(*) n FROM leads GROUP BY s`).all() as any[])
+    counts[r.s] = r.n
+  const reached = (stages: string[]) => stages.reduce((a, s) => a + (counts[s] ?? 0), 0)
+  // "Reached stage X" = currently at X or anywhere past it
+  const stageOrder = ['pending', 'audited', 'drafted', 'sent', 'converted']
+  const past: Record<string, string[]> = {
+    pending: ['pending', 'processing', 'audited', 'drafted', 'validated', 'sent', 'converted'],
+    audited: ['audited', 'drafted', 'validated', 'sent', 'converted'],
+    drafted: ['drafted', 'validated', 'sent', 'converted'],
+    sent: ['sent', 'converted'],
+    converted: ['converted'],
+  }
+  const funnel = stageOrder.map(s => ({ stage: s, reached: reached(past[s]) }))
+  const withConversion = funnel.map((f, i) => ({
+    ...f,
+    conversionFromPrev: i === 0 || funnel[i - 1].reached === 0
+      ? null
+      : Math.round((f.reached / funnel[i - 1].reached) * 100),
+  }))
+
+  const leads = db.prepare(
+    `SELECT l.id, l.company_name, l.trade, l.city, l.lead_status, l.fail_reason, l.updated_at,
+            o.id AS outreach_id, o.qa_score, o.sent_at, o.opened_at, o.reply_sentiment
+     FROM leads l
+     LEFT JOIN outreach_emails o ON o.id = (
+       SELECT id FROM outreach_emails WHERE lead_id = l.id ORDER BY id DESC LIMIT 1
+     )
+     ORDER BY l.updated_at DESC`,
+  ).all()
+
+  return { funnel: withConversion, leads, sendPaused: sendPausedReason() }
 }
 
 function getAgentDetail(id: string) {
@@ -228,6 +285,53 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/growth') return json(res, 200, getGrowth())
+
+  if (req.method === 'GET' && url.pathname === '/api/pipeline') return json(res, 200, getPipeline())
+
+  // A reply pasted into the dashboard (works today, no public URL needed)
+  const replyMatch = url.pathname.match(/^\/api\/replies\/(\d+)$/)
+  if (req.method === 'POST' && replyMatch) {
+    try {
+      const body = await readBody(req)
+      if (!body.text?.trim()) return json(res, 400, { error: 'expected { text: "the reply" }' })
+      const result = await classifyReply(Number(replyMatch[1]), body.text.trim(), 'dashboard')
+      return json(res, 200, { ok: true, classification: result, state: getState() })
+    } catch (err) {
+      return json(res, 400, { error: (err as Error).message })
+    }
+  }
+
+  // Resend webhook receiver — wire this URL (tunneled) into the Resend
+  // dashboard when opens/bounces tracking goes live. Engagement events update
+  // the DB; inbound replies (email.received) classify automatically.
+  if (req.method === 'POST' && url.pathname === '/api/webhooks/resend') {
+    try {
+      const event = await readBody(req)
+      const type: string = event.type ?? ''
+      if (type.startsWith('email.')) {
+        const kind = type.replace('email.', '')  // delivered|opened|bounced|complained
+        const matched = recordEngagement(event.data?.email_id ?? '', kind)
+        return json(res, 200, { ok: true, matched })
+      }
+      return json(res, 200, { ok: true, ignored: type })
+    } catch (err) {
+      return json(res, 400, { error: (err as Error).message })
+    }
+  }
+
+  const followupMatch = url.pathname.match(/^\/api\/followups\/(\d+)\/(send|dismiss)$/)
+  if (req.method === 'POST' && followupMatch) {
+    const [, id, action] = followupMatch
+    if (action === 'dismiss')
+      return json(res, 200, { ok: dismissFollowup(Number(id)), state: getState() })
+    const result = await sendFollowup(Number(id))
+    return json(res, result.ok ? 200 : 400, { ...result, state: getState() })
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/send/resume') {
+    resumeSends()
+    return json(res, 200, { ok: true, state: getState() })
+  }
 
   if (req.method === 'POST' && url.pathname === '/api/digest') {
     const result = await runDigest('manual')

@@ -11,6 +11,21 @@ export async function postAction(path) {
   return res.json()
 }
 
+export async function postJSON(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
+
+export async function fetchPipeline() {
+  const res = await fetch('/api/pipeline')
+  if (!res.ok) throw new Error(`pipeline fetch failed: ${res.status}`)
+  return res.json()
+}
+
 export async function fetchAgent(id) {
   const res = await fetch(`/api/agents/${id}`)
   if (!res.ok) throw new Error(`agent fetch failed: ${res.status}`)

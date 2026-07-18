@@ -8,6 +8,7 @@ import { ActivityFeed } from './components/ActivityFeed.jsx'
 import { ApprovalQueue } from './components/ApprovalQueue.jsx'
 import { KpiTile } from './components/KpiTile.jsx'
 import { GrowthScreen } from './components/GrowthScreen.jsx'
+import { PipelineScreen } from './components/PipelineScreen.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -16,7 +17,7 @@ export default function App() {
   const [ticking, setTicking] = useState(false)
   const [offline, setOffline] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState(null)
-  const [view, setView] = useState('mission') // 'mission' | 'growth'
+  const [view, setView] = useState('mission') // 'mission' | 'pipeline' | 'growth'
   const keyRef = useRef(0)
 
   const refresh = useCallback(async () => {
@@ -87,7 +88,7 @@ export default function App() {
           </span>
         )}
         <nav className="ml-4 flex gap-1 font-mono text-xs">
-          {[['mission', 'Mission Control'], ['growth', 'Growth']].map(([id, label]) => (
+          {[['mission', 'Mission Control'], ['pipeline', 'Pipeline'], ['growth', 'Growth']].map(([id, label]) => (
             <button key={id} onClick={() => setView(id)}
               className="rounded-lg px-3 py-1.5 uppercase tracking-wider transition-colors duration-150"
               style={view === id
@@ -119,6 +120,12 @@ export default function App() {
         </div>
       )}
 
+      {state?.sendPaused && view !== 'pipeline' && (
+        <div className="panel px-4 py-2 font-mono text-sm" style={{ color: 'var(--color-warning)' }}>
+          ⚠ {state.sendPaused}
+        </div>
+      )}
+
       {view === 'mission' ? (
         <main className="grid flex-1 gap-4 lg:grid-cols-[240px_1fr_300px]">
           <AgentRoster roster={state?.roster ?? []} onSelect={setSelectedAgent} />
@@ -127,6 +134,10 @@ export default function App() {
             <ApprovalQueue approvals={state?.approvals ?? []} onChanged={refresh} />
           </div>
           <ActivityFeed items={feed} />
+        </main>
+      ) : view === 'pipeline' ? (
+        <main className="flex-1">
+          <PipelineScreen replyQueue={state?.replyQueue ?? []} onStateChanged={refresh} />
         </main>
       ) : (
         <main className="flex-1">
