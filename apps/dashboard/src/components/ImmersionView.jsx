@@ -10,6 +10,7 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { X } from 'lucide-react'
 import { synapseBus } from '../lib/synapseBus.js'
+import { detectSoftwareGL, QUALITY_LOCK_KEY } from './SynapseCore.jsx'
 
 const NODES = [
   { id: 'ceo_agent', label: 'CEO', pos: [0, 1.55, 0], size: 0.34 },
@@ -29,7 +30,7 @@ const PULSES = 12
 
 function idx(id) { return NODES.findIndex(n => n.id === id) }
 
-function OrgGraph({ roster, onNode, labelRefs }) {
+function OrgGraph({ roster, onNode, labelRefs, cheap }) {
   const group = useRef()
   const pulseGeo = useRef()
   const pulsePositions = useMemo(() => new Float32Array(PULSES * 3), [])
@@ -111,14 +112,14 @@ function OrgGraph({ roster, onNode, labelRefs }) {
               onPointerOver={() => (document.body.style.cursor = 'pointer')}
               onPointerOut={() => (document.body.style.cursor = '')}
             >
-              <sphereGeometry args={[n.size, 24, 24]} />
+              <sphereGeometry args={[n.size, cheap ? 12 : 24, cheap ? 12 : 24]} />
               <meshBasicMaterial
                 color={i === 0 ? '#38BDF8' : running ? '#22D3EE' : '#164E63'}
                 transparent opacity={running || i === 0 ? 0.95 : 0.7}
               />
             </mesh>
             <mesh>
-              <sphereGeometry args={[n.size * 1.5, 16, 16]} />
+              <sphereGeometry args={[n.size * 1.5, cheap ? 10 : 16, cheap ? 10 : 16]} />
               <meshBasicMaterial color={i === 0 ? '#38BDF8' : '#0EA5E9'} transparent
                 opacity={running || i === 0 ? 0.18 : 0.07}
                 depthWrite={false} blending={THREE.AdditiveBlending} />
@@ -131,10 +132,13 @@ function OrgGraph({ roster, onNode, labelRefs }) {
 }
 
 // Camera flies through the membrane: starts at the sphere's seat and dollies
-// through to the org's viewing position.
-function FlyIn() {
+// through to the org's viewing position. In cheap mode (software/weak GL) the
+// dolly is skipped — at seconds-per-frame the animation would never finish
+// and the org nodes would sit off-camera, unclickable.
+function FlyIn({ skip }) {
   const t = useRef(0)
   useFrame(({ camera }, dt) => {
+    if (skip) { camera.position.set(0, 0.15, 5.2); return }
     if (t.current >= 1) return
     t.current = Math.min(1, t.current + dt / 1.4)
     const eased = 1 - Math.pow(1 - t.current, 3)
@@ -150,6 +154,14 @@ export function ImmersionView({ roster, onSelectAgent, onOpenCeo, onClose }) {
     const saved = Number(localStorage.getItem('synapse-quality-tier'))
     return Number.isInteger(saved) && saved >= 0 ? saved : 2
   })
+  // Cheap mode: no fly-in, no bloom, no AA, low DPR, low-poly nodes. The org
+  // scene is tiny (6 spheres + a dozen lines), so unlike the main sphere it
+  // stays ANIMATED even on software WebGL — it just sheds every fullscreen
+  // pass. Entered when the saved tier is already lowered, or the moment
+  // software GL is detected at canvas creation. A pinned tier (the badge on
+  // the sphere) always wins — pinned q2 runs the full fly-in regardless.
+  const pinned = localStorage.getItem(QUALITY_LOCK_KEY) === '1'
+  const [cheap, setCheap] = useState(tier < 2)
 
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
@@ -181,21 +193,25 @@ export function ImmersionView({ roster, onSelectAgent, onOpenCeo, onClose }) {
         </div>
       ))}
 
+      {/* key: antialias/dpr are construction-time options — flipping to cheap
+          mid-flight (software-GL detection) needs a clean canvas rebuild */}
       <Canvas
-        gl={{ antialias: tier === 2, alpha: true }}
-        dpr={tier === 2 ? [1, 2] : 1}
-        camera={{ position: [0, 0, 1.2], fov: 50 }}
-        frameloop={tier === 0 ? 'demand' : 'always'}
+        key={cheap ? 'cheap' : 'full'}
+        gl={{ antialias: !cheap, alpha: true }}
+        dpr={cheap ? 0.75 : [1, 2]}
+        camera={{ position: cheap ? [0, 0.15, 5.2] : [0, 0, 1.2], fov: 50 }}
+        frameloop="always"
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping
           gl.outputColorSpace = THREE.SRGBColorSpace
+          if (detectSoftwareGL(gl) && !cheap && !pinned) setCheap(true)
         }}
       >
         <ambientLight intensity={0.5} />
-        <FlyIn />
-        <OrgGraph roster={roster} labelRefs={labelRefs}
+        <FlyIn skip={cheap} />
+        <OrgGraph roster={roster} labelRefs={labelRefs} cheap={cheap}
           onNode={id => (id === 'ceo_agent' ? onOpenCeo() : onSelectAgent(id))} />
-        {tier === 2 && (
+        {!cheap && tier === 2 && (
           <EffectComposer>
             <Bloom luminanceThreshold={0.15} intensity={1.3} mipmapBlur />
           </EffectComposer>

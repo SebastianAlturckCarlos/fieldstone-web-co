@@ -23,6 +23,7 @@ const LINK_DIST = 0.55 // max neighbor distance for a synapse
 // (each blurred panel re-samples the animated backdrop EVERY frame — that
 // combination is what melted weak GPUs, not the sphere's own geometry).
 const TIER_KEY = 'synapse-quality-tier'
+export const QUALITY_LOCK_KEY = 'synapse-quality-lock'
 
 function initialTier() {
   const saved = Number(localStorage.getItem(TIER_KEY))
@@ -33,7 +34,7 @@ function applyLeanClass(tier) {
   document.documentElement.classList.toggle('perf-lean', tier < 2)
 }
 
-function detectSoftwareGL(gl) {
+export function detectSoftwareGL(gl) {
   try {
     const ctx = gl.getContext()
     const ext = ctx.getExtension('WEBGL_debug_renderer_info')
@@ -186,8 +187,10 @@ function NeuralMesh({ tier }) {
     pulseGeo.current.attributes.position.needsUpdate = true // GPU re-upload — required
   })
 
-  // Without the bloom pass (tier<2), brighten materials so the glow survives
-  const glowBoost = tier === 2 ? 1 : 1.6
+  // Without the bloom pass (tier<2), brighten materials so the glow survives —
+  // this is now the ONLY glow mechanism on software-rendered/weak GPUs, so
+  // push it further than bloom-assisted tier 2 needs.
+  const glowBoost = tier === 2 ? 1 : 1.85
 
   return (
     <group ref={spin}>
@@ -195,15 +198,15 @@ function NeuralMesh({ tier }) {
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[nodes, 3]} />
         </bufferGeometry>
-        <pointsMaterial color="#22D3EE" size={0.035 * (tier === 2 ? 1 : 1.15)} sizeAttenuation transparent
-          opacity={Math.min(1, 0.9 * glowBoost)} depthWrite={false} blending={THREE.AdditiveBlending} />
+        <pointsMaterial color="#22D3EE" size={0.05 * (tier === 2 ? 1 : 1.3)} sizeAttenuation transparent
+          opacity={Math.min(1, 0.95 * glowBoost)} depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
 
       <lineSegments>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[linePositions, 3]} />
         </bufferGeometry>
-        <lineBasicMaterial color="#0EA5E9" transparent opacity={0.12 * glowBoost}
+        <lineBasicMaterial color="#0EA5E9" transparent opacity={0.16 * glowBoost}
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </lineSegments>
 
@@ -211,15 +214,15 @@ function NeuralMesh({ tier }) {
         <bufferGeometry ref={pulseGeo}>
           <bufferAttribute attach="attributes-position" args={[pulsePositions, 3]} />
         </bufferGeometry>
-        <pointsMaterial color="#7DD3FC" size={0.09} sizeAttenuation transparent
-          depthWrite={false} blending={THREE.AdditiveBlending} />
+        <pointsMaterial color="#BAE6FD" size={0.12} sizeAttenuation transparent
+          opacity={Math.min(1, glowBoost)} depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
 
       <points>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[nebula, 3]} />
         </bufferGeometry>
-        <pointsMaterial color="#0EA5E9" size={0.02} sizeAttenuation transparent opacity={0.35}
+        <pointsMaterial color="#0EA5E9" size={0.024} sizeAttenuation transparent opacity={0.4 * glowBoost}
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </points>
 
@@ -233,14 +236,14 @@ function NeuralMesh({ tier }) {
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[ring, 3]} />
         </bufferGeometry>
-        <lineBasicMaterial color="#22D3EE" transparent opacity={0.18 * glowBoost}
+        <lineBasicMaterial color="#22D3EE" transparent opacity={0.22 * glowBoost}
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </lineLoop>
       <lineLoop ref={ringB}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[ring, 3]} />
         </bufferGeometry>
-        <lineBasicMaterial color="#0EA5E9" transparent opacity={0.12 * glowBoost}
+        <lineBasicMaterial color="#0EA5E9" transparent opacity={0.16 * glowBoost}
           depthWrite={false} blending={THREE.AdditiveBlending} />
       </lineLoop>
     </group>
@@ -276,11 +279,17 @@ export function SynapseCore({ onActivate }) {
   const reduced = typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const [tier, setTier] = useState(initialTier)
+  // Pinned = the human chose this tier with the badge. While pinned, NOTHING
+  // auto-downgrades — not the frame governor, not the software-GL snap. The
+  // machine renders what it was told to render, at whatever speed it can.
+  const [pinned, setPinned] = useState(() => localStorage.getItem(QUALITY_LOCK_KEY) === '1')
   const [fps, setFps] = useState(null)
   const [hidden, setHidden] = useState(document.hidden)
   const slowSamples = useRef(0)
+  const healedThisSession = useRef(false)
 
   useEffect(() => { applyLeanClass(tier); localStorage.setItem(TIER_KEY, String(tier)) }, [tier])
+  useEffect(() => { localStorage.setItem(QUALITY_LOCK_KEY, pinned ? '1' : '0') }, [pinned])
   useEffect(() => {
     const onVis = () => setHidden(document.hidden)
     document.addEventListener('visibilitychange', onVis)
@@ -289,6 +298,7 @@ export function SynapseCore({ onActivate }) {
 
   const onSample = useCallback(avgFps => {
     setFps(Math.round(avgFps))
+    if (pinned) return // human's choice stands, whatever the frame rate
     // Two consecutive slow seconds -> drop a tier. 24fps is the floor of
     // "reads as motion"; below it the cinematic frame does more harm than good.
     if (avgFps < 24) {
@@ -299,9 +309,24 @@ export function SynapseCore({ onActivate }) {
     } else {
       slowSamples.current = 0
     }
-  }, [])
+  }, [pinned])
 
-  const still = reduced || tier === 0 || hidden
+  // Badge cycle: auto -> pin q2 -> pin q1 -> pin q0 -> auto. First click gives
+  // full cinema — that's what people reach for the badge wanting.
+  const cycleQuality = useCallback(e => {
+    e.stopPropagation()
+    slowSamples.current = 0
+    if (!pinned) { setPinned(true); setTier(2) }
+    else if (tier > 0) setTier(tier - 1)
+    else { setPinned(false); setTier(2) } // auto again, from the top; governor re-verifies
+  }, [pinned, tier])
+
+  // OS reduced-motion freezes the sphere by DEFAULT (accessibility guideline:
+  // respect prefers-reduced-motion) — but a pinned tier is the user explicitly
+  // asking this app for motion, which outranks the OS-wide hint. Without this
+  // override, Windows' "Animation effects: off" hard-freezes the sphere on
+  // machines with perfectly healthy GPUs, and no tier change can unfreeze it.
+  const still = hidden || tier === 0 || (!pinned && reduced)
 
   return (
     <div
@@ -310,6 +335,12 @@ export function SynapseCore({ onActivate }) {
       role="button"
       tabIndex={0}
       onKeyDown={e => { if (e.key === 'Enter') onActivate?.() }}
+      style={{
+        // Static glow — a single non-animated radial gradient, painted once.
+        // This is the glow floor on software-rendered GPUs where the WebGL
+        // bloom pass never runs at all (tier < 2).
+        background: 'radial-gradient(ellipse 60% 55% at 50% 50%, rgba(56,189,248,0.16), transparent 70%)',
+      }}
       aria-label="Enter the Synapse — spatial agent view"
     >
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-center pointer-events-none">
@@ -318,10 +349,18 @@ export function SynapseCore({ onActivate }) {
           Real-Time Vector Sync · click to enter
         </p>
       </div>
-      <div className="absolute bottom-2 right-3 z-10 font-mono text-[9px] pointer-events-none"
-        style={{ color: 'var(--color-muted-foreground)', opacity: 0.7 }}>
-        q{tier}{fps !== null && !still ? ` · ${fps}fps` : tier === 0 ? ' · static' : ''}
-      </div>
+      {/* Quality badge is a button: pin q0 -> pin q1 -> pin q2 -> auto.
+          Pinned tiers are never auto-downgraded. */}
+      <button
+        onClick={cycleQuality}
+        title="Cycle render quality: pin q0 (static) → pin q1 (lean) → pin q2 (full cinema) → auto"
+        className="absolute bottom-2 right-3 z-10 rounded px-1.5 py-0.5 font-mono text-[9px]"
+        style={{
+          color: pinned ? 'var(--color-accent)' : 'var(--color-muted-foreground)',
+          opacity: 0.85, background: 'rgba(2,6,23,0.5)',
+        }}>
+        q{tier}{pinned ? ' · pinned' : ' · auto'}{fps !== null && !still ? ` · ${fps}fps` : tier === 0 ? ' · static' : ''}
+      </button>
       {/* key={tier} — antialias/dpr are construction-time options, so a tier
           change rebuilds the canvas cleanly */}
       <Canvas
@@ -335,7 +374,17 @@ export function SynapseCore({ onActivate }) {
           gl.outputColorSpace = THREE.SRGBColorSpace
           // Software WebGL can't do this scene at speed no matter what we
           // trim — jump straight to the static frame instead of thrashing.
-          if (detectSoftwareGL(gl) && tier > 0) setTier(0)
+          // Unless the human pinned a tier: their choice always wins.
+          if (detectSoftwareGL(gl)) {
+            if (tier > 0 && !pinned) setTier(0)
+          } else if (!pinned && tier < 2 && !healedThisSession.current) {
+            // Hardware GL but a degraded saved tier: the downgrade came from a
+            // past bad state (software rendering, driver glitch). Climb back to
+            // full and let the governor re-verify. Once per session, so a
+            // genuine governor downgrade isn't reversed in a loop.
+            healedThisSession.current = true
+            setTier(2)
+          }
         }}
       >
         <ambientLight intensity={0.4} />

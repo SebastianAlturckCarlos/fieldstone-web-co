@@ -27,6 +27,15 @@ body {
   line-height: 1.5;
 }
 
+/* A single static ambient glow — no animation, no separate layers, so it
+   costs nothing to composite (unlike the old animated starfield/nebula
+   stack, which forced every blurred panel to re-sample a moving backdrop
+   every frame — brutal on software-rendered/weak GPUs). Painted once. */
+body {
+  background-image: radial-gradient(ellipse 70% 55% at 50% 20%, rgba(14, 165, 233, 0.10), transparent 70%);
+  background-attachment: fixed;
+}
+
 .font-display { font-family: 'Space Grotesk', sans-serif; }
 .font-mono { font-family: 'JetBrains Mono', monospace; }
 
@@ -51,101 +60,6 @@ body {
   color: var(--color-muted-foreground);
 }
 
-/* ===== Cinematic background stack (fixed, behind everything) ===== */
-.bg-fx { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-
-.bg-grid {
-  position: absolute; inset: -50%;
-  background-image:
-    linear-gradient(rgba(56, 189, 248, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
-  background-size: 56px 56px;
-  transform: perspective(600px) rotateX(55deg) translateY(10%);
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 60%, black 30%, transparent 75%);
-  animation: grid-drift 24s linear infinite;
-}
-@keyframes grid-drift { from { background-position: 0 0; } to { background-position: 0 56px; } }
-
-.bg-glow { position: absolute; border-radius: 50%; filter: blur(64px); }
-.bg-glow--core {
-  width: 60vw; height: 60vw; left: 20vw; top: 8vh;
-  background: radial-gradient(circle, rgba(14, 165, 233, 0.16), transparent 65%);
-  animation: glow-breathe 9s ease-in-out infinite;
-}
-.bg-glow--edge {
-  width: 40vw; height: 40vw; right: -12vw; bottom: -10vh;
-  background: radial-gradient(circle, rgba(34, 211, 238, 0.09), transparent 65%);
-  animation: glow-breathe 13s ease-in-out infinite reverse;
-}
-@keyframes glow-breathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
-
-/* Deep-space nebulae — slow-drifting colored gas clouds */
-.nebula { position: absolute; border-radius: 50%; filter: blur(52px); mix-blend-mode: screen; }
-.nebula--indigo {
-  width: 55vw; height: 38vw; left: -14vw; top: -8vh;
-  background: radial-gradient(ellipse, rgba(79, 70, 229, 0.16), rgba(30, 27, 75, 0.06) 55%, transparent 75%);
-  animation: nebula-drift 38s ease-in-out infinite alternate;
-}
-.nebula--violet {
-  width: 44vw; height: 30vw; right: -10vw; top: 18vh;
-  background: radial-gradient(ellipse, rgba(147, 51, 234, 0.10), transparent 70%);
-  animation: nebula-drift 47s ease-in-out infinite alternate-reverse;
-}
-.nebula--teal {
-  width: 50vw; height: 34vw; left: 24vw; bottom: -14vh;
-  background: radial-gradient(ellipse, rgba(13, 148, 136, 0.10), transparent 70%);
-  animation: nebula-drift 55s ease-in-out infinite alternate;
-}
-@keyframes nebula-drift {
-  from { transform: translate(0, 0) rotate(0deg) scale(1); }
-  to { transform: translate(4vw, -3vh) rotate(8deg) scale(1.12); }
-}
-
-/* Shooting star — streaks across every ~14s */
-.shooting-star {
-  position: absolute; top: 12%; left: -10%;
-  width: 140px; height: 1.5px;
-  background: linear-gradient(90deg, transparent, rgba(191, 219, 254, 0.9), transparent);
-  transform: rotate(-18deg);
-  animation: shoot 14s ease-in 4s infinite;
-  opacity: 0;
-}
-.shooting-star--2 { top: 55%; animation-delay: 9s; animation-duration: 17s; width: 100px; }
-@keyframes shoot {
-  0% { opacity: 0; transform: translateX(0) rotate(-18deg); }
-  3% { opacity: 1; }
-  8% { opacity: 0; transform: translateX(120vw) rotate(-18deg); }
-  100% { opacity: 0; transform: translateX(120vw) rotate(-18deg); }
-}
-
-.starfield, .starfield::before, .starfield::after {
-  content: ''; position: absolute; inset: 0;
-  background-repeat: repeat; background-size: 600px 600px;
-}
-.starfield {
-  background-image:
-    radial-gradient(1px 1px at 40px 60px, rgba(148, 197, 253, 0.9), transparent),
-    radial-gradient(1px 1px at 180px 320px, rgba(148, 197, 253, 0.6), transparent),
-    radial-gradient(1.5px 1.5px at 320px 140px, rgba(34, 211, 238, 0.8), transparent),
-    radial-gradient(1px 1px at 500px 480px, rgba(148, 197, 253, 0.5), transparent),
-    radial-gradient(1px 1px at 90px 500px, rgba(125, 211, 252, 0.7), transparent);
-  animation: star-twinkle 7s ease-in-out infinite;
-}
-.starfield::before {
-  background-image:
-    radial-gradient(1px 1px at 260px 240px, rgba(148, 197, 253, 0.7), transparent),
-    radial-gradient(1px 1px at 420px 60px, rgba(34, 211, 238, 0.6), transparent),
-    radial-gradient(1.5px 1.5px at 560px 360px, rgba(148, 197, 253, 0.8), transparent);
-  animation: star-twinkle 11s ease-in-out infinite reverse;
-}
-@keyframes star-twinkle { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-
-.scanlines {
-  position: absolute; inset: 0;
-  background: repeating-linear-gradient(0deg, rgba(2, 6, 23, 0.25) 0 1px, transparent 1px 3px);
-  opacity: 0.35;
-}
-
 /* Panel corner accents — sci-fi HUD brackets */
 .panel { position: relative; }
 .panel::before, .panel::after {
@@ -157,25 +71,13 @@ body {
 
 .glow-text { text-shadow: 0 0 12px rgba(56, 189, 248, 0.55); }
 
-@media (prefers-reduced-motion: reduce) {
-  .bg-grid, .bg-glow, .starfield, .starfield::before, .nebula, .shooting-star { animation: none; }
-  .shooting-star { display: none; }
-}
-
 /* Perf-lean mode — set on <html> by the SynapseCore quality governor when the
-   machine can't hold frame rate. The lethal combination on weak GPUs is
-   backdrop-filter panels sampling ANIMATED backdrops: every panel re-blurs
-   the whole screen behind it every frame. Lean mode freezes the backdrop and
-   drops the per-panel blur; the layered gradients keep the Deep Field look. */
+   machine can't hold frame rate. Drops the per-panel backdrop blur, which is
+   the one remaining compositing cost now that the background is static. */
 .perf-lean .panel {
   backdrop-filter: none;
   background: linear-gradient(160deg, rgba(14, 18, 35, 0.94), rgba(2, 6, 23, 0.96));
 }
-.perf-lean .bg-grid, .perf-lean .bg-glow, .perf-lean .nebula,
-.perf-lean .starfield, .perf-lean .starfield::before { animation: none; }
-.perf-lean .shooting-star { display: none; }
-.perf-lean .scanlines { display: none; }
-.perf-lean .nebula, .perf-lean .bg-glow { filter: blur(36px); }
 
 /* Live data enters with a stagger — never instant pops */
 @keyframes feed-in {

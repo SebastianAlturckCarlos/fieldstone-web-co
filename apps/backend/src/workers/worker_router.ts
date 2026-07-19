@@ -1,5 +1,4 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,7 +6,6 @@ import { AGENT_MODE, ALLOW_PAID_API, OLLAMA_URL, QA_THRESHOLD } from '../core/co
 import { recordRun } from '../core/ledger.js'
 import { mockAgent } from './mocks.js'
 
-const execFileAsync = promisify(execFile)
 const here = path.dirname(fileURLToPath(import.meta.url))
 const profiles = JSON.parse(readFileSync(path.join(here, '../../config/profiles.json'), 'utf-8'))
 
@@ -32,9 +30,12 @@ function interpolate(system: string, vars: Record<string, string>): string {
   return system.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? `{{${k}}}`)
 }
 
-// Parse the CEO's "APPROVE 88 / REJECT 64 + feedback" text protocol
+// Parse the CEO's "APPROVE 88 / REJECT 64 + feedback" text protocol.
+// Real models sometimes write a preamble line before the verdict ("Here is my
+// determination: REJECT 75 ...") — find the verdict anywhere, not just at the
+// start. First VERB+score match wins; feedback is everything after it.
 function parseCeoVerdict(text: string) {
-  const m = text.trim().match(/^(APPROVE|REJECT)\s+(\d+)\s*([\s\S]*)$/)
+  const m = text.match(/\b(APPROVE|REJECT)\s+(\d{1,3})\b\s*([\s\S]*)$/)
   if (!m) throw new Error(`CEO verdict unparseable: ${text.slice(0, 80)}`)
   return { approved: m[1] === 'APPROVE', score: Number(m[2]), feedback: m[3].trim() }
 }
@@ -57,18 +58,28 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
   // model, no lead ever fails just because Qwen is absent.
   const useOllama = p.provider === 'ollama' && (AGENT_MODE !== 'claude-code' || await ollamaUp())
   if (useOllama) {
-    const res = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: 'POST',
-      body: JSON.stringify({
-        model: p.model, stream: false, format: 'json',
-        messages: [
-          { role: 'system', content: p.system },
-          { role: 'user', content: JSON.stringify(payload) },
-        ],
-      }),
-    }).then(r => r.json()) as any
-    recordRun(agentId, p.model, 'ollama', 0, 0, Date.now() - started, leadId)
-    return JSON.parse(res.message.content)
+    try {
+      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: 'POST',
+        body: JSON.stringify({
+          model: p.model, stream: false, format: 'json',
+          messages: [
+            { role: 'system', content: p.system },
+            { role: 'user', content: JSON.stringify(payload) },
+          ],
+        }),
+      }).then(r => r.json()) as any
+      // Ollama reports problems (e.g. "model not found") as {error} with no
+      // message — read it as one instead of crashing on res.message.content
+      if (res.error || !res.message?.content) throw new Error(`Ollama: ${res.error ?? 'unexpected /api/chat response shape'}`)
+      recordRun(agentId, p.model, 'ollama', 0, 0, Date.now() - started, leadId)
+      return JSON.parse(res.message.content)
+    } catch (err) {
+      // In claude-code mode a broken Ollama is a downgrade, not a lead killer:
+      // fall through to the subscription path (haiku). Other modes rethrow.
+      if (AGENT_MODE !== 'claude-code') throw err
+      console.log(`  [router] Ollama failed (${(err as Error).message.slice(0, 90)}) — ${agentId} via claude-code fallback`)
+    }
   }
 
   const system = interpolate(p.system, {
@@ -88,12 +99,26 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
     if (p.provider === 'ollama')
       console.log(`  [router] Ollama unreachable — ${agentId} via claude-code (${model}, subscription)`)
     const prompt = `${system}\n\n---\nInput payload:\n${JSON.stringify(payload)}`
-    // No shell — with shell:true Windows concatenates args UNESCAPED, and a
-    // prompt full of newlines/quotes/JSON gets shredded by cmd.exe.
-    const { stdout } = await execFileAsync(
-      'claude', ['-p', prompt, '--output-format', 'json', '--model', model],
-      { timeout: 180_000, maxBuffer: 10 * 1024 * 1024 },
-    )
+    // The prompt travels via STDIN, never argv. Two Windows realities force
+    // this: (1) npm installs `claude` as a .cmd shim, which Node can only
+    // spawn with shell:true (plain execFile -> ENOENT); (2) shell:true passes
+    // argv through cmd.exe UNESCAPED, shredding any prompt with quotes or
+    // newlines. Static args + piped stdin sidesteps both, on every platform.
+    const stdout = await new Promise<string>((resolve, reject) => {
+      const child = spawn('claude', ['-p', '--output-format', 'json', '--model', model],
+        { shell: true, timeout: 180_000 })
+      let out = ''
+      let errOut = ''
+      child.stdout.on('data', d => { out += d })
+      child.stderr.on('data', d => { errOut += d })
+      child.on('error', reject)
+      child.on('close', code => {
+        if (code === 0) resolve(out)
+        else reject(new Error(`claude CLI exited ${code}: ${errOut.slice(0, 300) || out.slice(0, 300)}`))
+      })
+      child.stdin.write(prompt)
+      child.stdin.end()
+    })
     const wrapper = extractJson(stdout)
     recordRun(agentId, model, 'claude-code',
       wrapper.usage?.input_tokens ?? 0, wrapper.usage?.output_tokens ?? 0,

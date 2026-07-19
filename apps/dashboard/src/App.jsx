@@ -58,19 +58,6 @@ export default function App() {
 
   return (
     <div className="mx-auto min-h-screen max-w-7xl px-4 py-4 flex flex-col gap-4">
-      <div aria-hidden className="bg-fx">
-        <div className="nebula nebula--indigo" />
-        <div className="nebula nebula--violet" />
-        <div className="nebula nebula--teal" />
-        <div className="bg-glow bg-glow--core" />
-        <div className="bg-glow bg-glow--edge" />
-        <div className="starfield" />
-        <div className="shooting-star" />
-        <div className="shooting-star shooting-star--2" />
-        <div className="bg-grid" />
-        <div className="scanlines" />
-      </div>
-
       <header className="panel flex items-center gap-4 px-5 py-3">
         <span aria-hidden className="h-3 w-3 rotate-45"
           style={{ background: 'var(--color-primary)', boxShadow: '0 0 10px var(--color-primary)' }} />
