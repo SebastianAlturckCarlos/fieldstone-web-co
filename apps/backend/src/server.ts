@@ -1,7 +1,7 @@
 // Live-data bridge for the dashboard. Plain node:http — no framework needed
 // for four endpoints on localhost.
 import http from 'node:http'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { db } from './core/database.js'
@@ -382,6 +382,14 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Fieldstone engine API on http://localhost:${PORT} (mode: ${AGENT_MODE})`)
+  // A missing .env almost always means someone launched from the git repo
+  // instead of their run workspace — that boots silent dry-run defaults AND
+  // writes a live SQLite file next to the repo (cloud-sync corruption risk).
+  if (!existsSync(path.join(here, '../.env'))) {
+    console.log('⚠  No .env found next to this backend. Running with dry-run defaults.')
+    console.log('⚠  If you meant to run the real engine, launch from your local run')
+    console.log('⚠  workspace (e.g. C:\\dev\\fieldstone-workspace\\apps\\backend) — see apps/README.md.')
+  }
   // Crash recovery: leads stuck mid-claim from a previous process return to
   // the queue — nothing needs a human to un-wedge the pipeline.
   const reclaimed = db.prepare(`UPDATE leads SET lead_status='pending', updated_at=CURRENT_TIMESTAMP WHERE lead_status='processing'`).run().changes
