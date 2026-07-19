@@ -104,22 +104,34 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
     // spawn with shell:true (plain execFile -> ENOENT); (2) shell:true passes
     // argv through cmd.exe UNESCAPED, shredding any prompt with quotes or
     // newlines. Static args + piped stdin sidesteps both, on every platform.
+    // Our agents are single-shot text generators. Deny the agentic tools
+    // outright (the Dev Agent once spent 14 turns trying to Write its skill
+    // file to disk itself), keep a small turn buffer, and give the
+    // file-writing Dev Agent triple the clock.
+    const timeoutMs = agentId === 'dev_agent' ? 540_000 : 180_000
     const stdout = await new Promise<string>((resolve, reject) => {
-      const child = spawn('claude', ['-p', '--output-format', 'json', '--model', model],
-        { shell: true, timeout: 180_000 })
+      const child = spawn('claude',
+        ['-p', '--output-format', 'json', '--model', model, '--max-turns', '3',
+         '--disallowedTools', 'Write,Edit,Bash,Read,Glob,Grep,WebFetch,WebSearch,Task,NotebookEdit'],
+        { shell: true, timeout: timeoutMs })
       let out = ''
       let errOut = ''
       child.stdout.on('data', d => { out += d })
       child.stderr.on('data', d => { errOut += d })
       child.on('error', reject)
       child.on('close', code => {
-        if (code === 0) resolve(out)
-        else reject(new Error(`claude CLI exited ${code}: ${errOut.slice(0, 300) || out.slice(0, 300)}`))
+        // A timeout kill can land AFTER the CLI already streamed its full
+        // result (exit code null) — complete output wins over exit status.
+        if (code === 0) return resolve(out)
+        try { extractJson(out); return resolve(out) } catch {}
+        reject(new Error(`claude CLI exited ${code}: ${errOut.slice(0, 300) || out.slice(0, 300)}`))
       })
       child.stdin.write(prompt)
       child.stdin.end()
     })
     const wrapper = extractJson(stdout)
+    if (wrapper.result === undefined)
+      throw new Error(`claude CLI returned no result (subtype: ${wrapper.subtype ?? 'unknown'})`)
     recordRun(agentId, model, 'claude-code',
       wrapper.usage?.input_tokens ?? 0, wrapper.usage?.output_tokens ?? 0,
       Date.now() - started, leadId)

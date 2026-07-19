@@ -9,7 +9,7 @@ import { emitEvent } from '../core/events.js'
 
 // Reserved/test domains (RFC 2606 + our seed data) — a real send to these
 // hard-bounces and dings sender reputation for nothing.
-function isTestAddress(email: string): boolean {
+export function isTestAddress(email: string): boolean {
   return /@([\w.-]+\.)?example\.(com|org|net)$|\.(test|invalid|localhost)$/i.test(email)
 }
 

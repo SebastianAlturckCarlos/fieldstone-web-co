@@ -6,7 +6,7 @@ import { db } from '../core/database.js'
 import { runAgent } from '../workers/worker_router.js'
 import { emitEvent } from '../core/events.js'
 import { AGENT_MODE, SEND_MODE } from '../core/config.js'
-import { deliver, sendPausedReason } from './send.js'
+import { deliver, sendPausedReason, isTestAddress } from './send.js'
 
 const CALENDAR_LINK = process.env.CALENDAR_LINK ?? ''
 
@@ -135,6 +135,8 @@ export async function sendFollowup(replyDraftId: number): Promise<{ ok: boolean;
   if (paused && SEND_MODE !== 'mock') return { ok: false, error: `sends paused: ${paused}` }
   if (SEND_MODE === 'resend' && AGENT_MODE === 'dry-run')
     return { ok: false, error: 'refusing real delivery of a canned dry-run follow-up — set AGENT_MODE=claude-code' }
+  if (SEND_MODE === 'resend' && isTestAddress(d.contact_email))
+    return { ok: false, error: 'test/example address — not sendable' }
   if (db.prepare(`SELECT 1 FROM suppression WHERE email = ?`).get(d.contact_email))
     return { ok: false, error: 'address is suppressed' }
 

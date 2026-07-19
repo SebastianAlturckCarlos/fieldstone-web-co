@@ -40,6 +40,18 @@ const AGENTS = [
 
 let tickRunning = false
 
+// An autonomous engine must never die to a stray async failure — log, alert
+// the dashboard, keep running. (A Dev Agent CLI timeout once escaped an
+// unguarded route and took the whole server down.)
+process.on('unhandledRejection', err => {
+  console.log(`[UNHANDLED] ${(err as Error)?.message ?? err}`)
+  emitEvent('feed', { msg: `engine error (recovered): ${((err as Error)?.message ?? String(err)).slice(0, 120)}`, kind: 'alert' })
+})
+process.on('uncaughtException', err => {
+  console.log(`[UNCAUGHT] ${err.message}`)
+  emitEvent('feed', { msg: `engine error (recovered): ${err.message.slice(0, 120)}`, kind: 'alert' })
+})
+
 async function runTickGuarded(source: string): Promise<{ ok: boolean; paused?: string; error?: string }> {
   if (tickRunning) return { ok: false, error: 'tick already running' }
   tickRunning = true
@@ -358,13 +370,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/digest') {
-    const result = await runDigest('manual')
-    return json(res, 200, result)
+    try { return json(res, 200, await runDigest('manual')) }
+    catch (err) { return json(res, 500, { error: (err as Error).message }) }
   }
 
   if (req.method === 'POST' && url.pathname === '/api/dev-agent/run') {
-    const result = await runDevAgentCycle('manual')
-    return json(res, 200, result)
+    try { return json(res, 200, await runDevAgentCycle('manual')) }
+    catch (err) { return json(res, 500, { error: (err as Error).message }) }
   }
 
   const skillMatch = url.pathname.match(/^\/api\/skills\/([\w-]+)\/(approve|disable)$/)

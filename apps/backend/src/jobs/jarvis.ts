@@ -135,7 +135,8 @@ export async function handleJarvis(message: string): Promise<{ reply: string; ac
     const prompt = `${JARVIS_SYSTEM}\n\n---\nEngine state:\n${JSON.stringify(state)}\n\nOperator: ${message}`
     // No shell — see worker_router.ts: shell:true mangles multi-line prompts on Windows
     const { stdout } = await execFileAsync(
-      'claude', ['-p', prompt, '--output-format', 'json', '--model', 'claude-haiku-4-5-20251001'],
+      'claude', ['-p', prompt, '--output-format', 'json', '--model', 'claude-haiku-4-5-20251001', '--max-turns', '2',
+        '--disallowedTools', 'Write,Edit,Bash,Read,Glob,Grep,WebFetch,WebSearch,Task,NotebookEdit'],
       { timeout: 60_000, maxBuffer: 1024 * 1024 },
     )
     const wrapper = extractJson(stdout)
