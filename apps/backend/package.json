@@ -12,9 +12,12 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "puppeteer-core": "^24.0.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^26.1.1",
     "tsx": "^4.19.0"
   }
 }

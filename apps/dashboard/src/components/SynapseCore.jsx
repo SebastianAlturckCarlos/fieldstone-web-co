@@ -330,7 +330,7 @@ export function SynapseCore({ onActivate }) {
 
   return (
     <div
-      className="relative w-full h-[480px] lg:h-[540px] cursor-pointer"
+      className="relative h-full min-h-[480px] w-full cursor-pointer"
       onClick={onActivate}
       role="button"
       tabIndex={0}

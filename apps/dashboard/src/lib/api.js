@@ -32,6 +32,18 @@ export async function fetchAgent(id) {
   return res.json()
 }
 
+// Full drill-down for one lead: audit, brand, drafts, agent-run timeline.
+export async function fetchLead(id) {
+  const res = await fetch(`/api/leads/${id}`)
+  if (!res.ok) throw new Error(`lead fetch failed: ${res.status}`)
+  return res.json()
+}
+
+// The branded mockup screenshot for a lead (404s if none was rendered).
+export function snapshotUrl(leadId) {
+  return `/api/snapshots/${leadId}.png`
+}
+
 // Opens the SSE stream. Every feed event also fires a sphere pulse so
 // business activity is literally visible as light.
 export function openEventStream({ onFeed, onAlert, onAny }) {

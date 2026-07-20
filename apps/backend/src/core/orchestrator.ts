@@ -2,13 +2,15 @@ import { db } from './database.js'
 import { runAgent } from '../workers/worker_router.js'
 import { assertUnderBudget, assertLeadUnderBudget, BudgetExceeded } from './ledger.js'
 import { emitEvent } from './events.js'
-import { personalDemoLink } from './demo_link.js'
 import { commitEpisodicMemory } from './memory.js'
 import { fetchSiteBundle } from './site_fetch.js'
+import { captureLeadSnapshot } from './snapshot.js'
 import { AGENT_MODE } from './config.js'
 
-const BATCH_SIZE = 5
-const MAX_QA_LOOPS = 3
+// This engine runs on a dedicated high-end workstation — batch size and QA
+// depth are set for output quality, not for saving memory.
+const BATCH_SIZE = 10
+const MAX_QA_LOOPS = 4
 
 type Lead = {
   id: string; company_name: string; website_url: string; contact_email: string
@@ -58,7 +60,14 @@ export async function tick() {
       const sitePayload: any = {
         company_name: lead.company_name, website_url: lead.website_url, trade: lead.trade,
       }
-      if (AGENT_MODE !== 'dry-run') sitePayload.site = await fetchSiteBundle(lead.website_url)
+      let brand: any = null
+      if (AGENT_MODE !== 'dry-run') {
+        sitePayload.site = await fetchSiteBundle(lead.website_url)
+        // Brand assets (colors + logo) are parsed in code during the fetch —
+        // saved on the lead so the mockup snapshot renders in THEIR identity.
+        brand = sitePayload.site?.brand ?? null
+        if (brand) db.prepare(`UPDATE leads SET brand_json = ? WHERE id = ?`).run(JSON.stringify(brand), lead.id)
+      }
       const audit = await runAgent('researcher_agent', sitePayload, lead.id)
       if (!audit.flaws?.length) { transition(lead, 'failed', { failReason: 'no_flaws' }); continue }
       transition(lead, 'audited', { audit })
@@ -66,11 +75,18 @@ export async function tick() {
       // 2. Creation <-> review loop: CMO drafts from the Researcher's
       //    evidence, CEO scores against the rubric, rejection feedback goes
       //    straight back to the CMO. Distinct roles, real consultation.
-      const demo_link = personalDemoLink(lead, audit)
+      //    The email carries an embedded screenshot of a mockup themed with
+      //    the prospect's own brand — the copy references it, never a live link.
+      const preview = {
+        attached: true,
+        company: lead.company_name,
+        trade: lead.trade,
+        branded_with: brand?.primary_color ? 'their site colors + logo' : 'a clean default theme',
+      }
       let draft: any, verdict: any, feedback = ''
       for (let i = 0; i < MAX_QA_LOOPS; i++) {
         assertLeadUnderBudget(lead.id)
-        draft = await runAgent('cmo_agent', { audit, feedback, demo_link }, lead.id)
+        draft = await runAgent('cmo_agent', { audit, feedback, preview }, lead.id)
         verdict = await runAgent('ceo_agent', { draft, audit }, lead.id)
         if (verdict.approved) break
         feedback = verdict.feedback
@@ -86,19 +102,19 @@ export async function tick() {
       let consult: any = null
       try {
         consult = await runAgent('sales_consult', {
-          draft, company_name: lead.company_name, trade: lead.trade, demo_link,
+          draft, company_name: lead.company_name, trade: lead.trade, preview,
         }, lead.id)
         if (consult && consult.click_score < 60) {
           console.log(`  [${lead.company_name}] consult ${consult.click_score} — one conversion revision`)
           const revised = await runAgent('cmo_agent', {
-            audit, feedback: `Sales Rep conversion notes: ${consult.notes?.join(' | ')}`, demo_link,
+            audit, feedback: `Sales Rep conversion notes: ${consult.notes?.join(' | ')}`, preview,
           }, lead.id)
           const reVerdict = await runAgent('ceo_agent', { draft: revised, audit }, lead.id)
           if (reVerdict.approved) {
             draft = revised
             verdict = reVerdict
             consult = await runAgent('sales_consult', {
-              draft, company_name: lead.company_name, trade: lead.trade, demo_link,
+              draft, company_name: lead.company_name, trade: lead.trade, preview,
             }, lead.id)
           }
         }
@@ -107,9 +123,17 @@ export async function tick() {
         console.log(`  [${lead.company_name}] consult skipped: ${(err as Error).message.slice(0, 80)}`)
       }
 
-      // 4. Queue for the human approval gate
-      db.prepare(`INSERT INTO outreach_emails (lead_id, subject, body, qa_score, consult_json) VALUES (?, ?, ?, ?, ?)`)
-        .run(lead.id, draft.subject, draft.body, verdict.score, consult ? JSON.stringify(consult) : null)
+      // 4. Render the branded mockup snapshot the email embeds. Never a gate:
+      //    a failed capture just means this email ships as clean text.
+      const snapshotPath = await captureLeadSnapshot(lead.id, {
+        company: lead.company_name, trade: lead.trade, city: lead.city,
+        brand, topFlawType: audit.flaws?.[0]?.type ?? null,
+      })
+      if (snapshotPath) emitEvent('feed', { msg: `preview rendered: ${lead.company_name}`, kind: 'system' })
+
+      // 5. Queue for the human approval gate
+      db.prepare(`INSERT INTO outreach_emails (lead_id, subject, body, qa_score, consult_json, snapshot_path) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(lead.id, draft.subject, draft.body, verdict.score, consult ? JSON.stringify(consult) : null, snapshotPath)
       transition(lead, 'drafted')
     } catch (err) {
       if (err instanceof BudgetExceeded) {

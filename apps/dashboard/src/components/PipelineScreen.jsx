@@ -1,20 +1,10 @@
-// Screen 2 — Pipeline: the 5-stage funnel with stage-to-stage conversion,
-// the dense lead table, and the reply desk (log a reply → Sales Rep
-// classifies it → follow-up drafts wait for a human send).
+// Screen 2 — Pipeline: the 5-stage funnel with stage-to-stage conversion, a
+// clickable Kanban board (click any lead card for the full drill-down:
+// audit, brand, snapshot, drafts, agent reasoning), and the reply desk.
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Send, X, MessageSquarePlus, PlayCircle, Loader2 } from 'lucide-react'
+import { Send, X, MessageSquarePlus, PlayCircle, Loader2, Image as ImageIcon, MailOpen } from 'lucide-react'
 import { fetchPipeline, postAction, postJSON } from '../lib/api.js'
-
-const STATUS_COLOR = {
-  pending: 'var(--color-muted-foreground)',
-  processing: 'var(--color-warning)',
-  audited: 'var(--color-primary)',
-  drafted: 'var(--color-accent)',
-  validated: 'var(--color-primary)',
-  sent: 'var(--color-success)',
-  converted: 'var(--color-success)',
-  failed: 'var(--color-destructive)',
-}
+import { LeadDetail, STATUS_COLOR } from './LeadDetail.jsx'
 
 function Funnel({ funnel }) {
   const max = Math.max(1, ...funnel.map(f => f.reached))
@@ -24,7 +14,7 @@ function Funnel({ funnel }) {
     <div className="panel p-4">
       <h2 className="label mb-3">Funnel — leads reaching each stage</h2>
       <div className="flex flex-col gap-1">
-        {funnel.map((f, i) => (
+        {funnel.map(f => (
           <div key={f.stage}>
             {f.conversionFromPrev !== null && (
               <div className="my-0.5 pl-24 font-mono text-[10px]"
@@ -40,12 +30,108 @@ function Funnel({ funnel }) {
                     width: `${Math.max(2, (f.reached / max) * 100)}%`,
                     background: 'linear-gradient(90deg, #0EA5E9, #7DD3FC)',
                   }} />
-                <span className="absolute inset-y-0 left-2 flex items-center font-mono text-xs font-semibold"
-                  style={{ color: '#020617', mixBlendMode: 'screen', textShadow: '0 0 6px rgba(2,6,23,0.7)' }}>
+                <span className="absolute inset-y-0 left-2 flex items-center font-mono text-xs font-semibold">
                   <span style={{ color: 'var(--color-foreground)' }}>{f.reached}</span>
                 </span>
               </div>
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// The board's stages. 'pending' absorbs 'processing' (a lead mid-claim is
+// still, from the human's seat, waiting).
+const BOARD_STAGES = [
+  ['pending', 'Pending', ['pending', 'processing']],
+  ['audited', 'Audited', ['audited']],
+  ['drafted', 'Drafted', ['drafted']],
+  ['validated', 'Approved', ['validated']],
+  ['sent', 'Sent', ['sent']],
+  ['converted', 'Converted', ['converted']],
+  ['failed', 'Failed', ['failed']],
+]
+
+function LeadCard({ lead, onOpen }) {
+  return (
+    <button
+      onClick={() => onOpen(lead.id)}
+      className="w-full rounded-lg border p-2.5 text-left transition-all duration-150 hover:-translate-y-px active:scale-[0.98]"
+      style={{ borderColor: 'var(--color-border)', background: 'var(--color-muted)' }}
+    >
+      <div className="truncate font-display text-[13px] font-medium" style={{ color: 'var(--color-foreground)' }}>
+        {lead.company_name}
+      </div>
+      <div className="mt-0.5 truncate font-mono text-[10px]" style={{ color: 'var(--color-muted-foreground)' }}>
+        {lead.trade} · {lead.city}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 font-mono text-[9px] uppercase">
+        {lead.qa_score != null && (
+          <span className="rounded px-1 py-0.5" style={{ background: 'var(--color-card)', color: 'var(--color-accent)' }}>
+            QA {lead.qa_score}
+          </span>
+        )}
+        {!!lead.has_snapshot && (
+          <span title="branded preview embedded" className="flex items-center gap-0.5 rounded px-1 py-0.5"
+            style={{ background: 'var(--color-card)', color: 'var(--color-primary)' }}>
+            <ImageIcon size={9} /> preview
+          </span>
+        )}
+        {lead.opened_at && (
+          <span title="opened" className="flex items-center gap-0.5 rounded px-1 py-0.5"
+            style={{ background: 'var(--color-card)', color: 'var(--color-success)' }}>
+            <MailOpen size={9} /> opened
+          </span>
+        )}
+        {lead.reply_sentiment && (
+          <span className="rounded px-1 py-0.5"
+            style={{
+              background: 'var(--color-card)',
+              color: lead.reply_sentiment === 'positive' ? 'var(--color-success)' : 'var(--color-muted-foreground)',
+            }}>
+            {lead.reply_sentiment}
+          </span>
+        )}
+        {lead.fail_reason && (
+          <span className="rounded px-1 py-0.5" style={{ background: 'var(--color-card)', color: 'var(--color-destructive)' }}>
+            {lead.fail_reason}
+          </span>
+        )}
+      </div>
+    </button>
+  )
+}
+
+function KanbanBoard({ leads, onOpen }) {
+  const columns = useMemo(() => BOARD_STAGES.map(([key, label, statuses]) => ({
+    key, label,
+    leads: leads.filter(l => statuses.includes(l.lead_status)),
+  })), [leads])
+
+  return (
+    <div className="panel p-4">
+      <h2 className="label mb-3">Board — click a lead for the full story</h2>
+      <div className="grid auto-cols-[230px] grid-flow-col gap-3 overflow-x-auto pb-1">
+        {columns.map(col => (
+          <div key={col.key} className="flex min-h-40 flex-col gap-2 rounded-xl p-2"
+            style={{ background: 'rgba(2,6,23,0.45)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-center gap-2 px-1 pt-1">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full"
+                style={{ background: STATUS_COLOR[col.key], boxShadow: `0 0 8px ${col.key === 'pending' ? 'transparent' : STATUS_COLOR[col.key]}` }} />
+              <span className="label text-[9px]">{col.label}</span>
+              <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                {col.leads.length}
+              </span>
+            </div>
+            {col.leads.map(l => <LeadCard key={l.id} lead={l} onOpen={onOpen} />)}
+            {col.leads.length === 0 && (
+              <div className="flex flex-1 items-center justify-center font-mono text-[10px]"
+                style={{ color: 'var(--color-muted-foreground)', opacity: 0.5 }}>
+                empty
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -173,53 +259,9 @@ export function FollowupQueue({ replyQueue, onChanged }) {
   )
 }
 
-function LeadTable({ leads }) {
-  return (
-    <div className="panel overflow-x-auto p-4">
-      <h2 className="label mb-3">Leads ({leads.length})</h2>
-      <table className="w-full border-collapse font-mono text-xs">
-        <thead>
-          <tr className="label text-left text-[9px]">
-            <th className="pb-2 pr-3">Company</th>
-            <th className="pb-2 pr-3">Trade</th>
-            <th className="pb-2 pr-3">City</th>
-            <th className="pb-2 pr-3">Status</th>
-            <th className="pb-2 pr-3">QA</th>
-            <th className="pb-2 pr-3">Opened</th>
-            <th className="pb-2 pr-3">Reply</th>
-            <th className="pb-2">Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leads.map(l => (
-            <tr key={l.id} className="border-t" style={{ borderColor: 'var(--color-border)', height: 40 }}>
-              <td className="pr-3" style={{ color: 'var(--color-foreground)' }}>{l.company_name}</td>
-              <td className="pr-3" style={{ color: 'var(--color-muted-foreground)' }}>{l.trade}</td>
-              <td className="pr-3" style={{ color: 'var(--color-muted-foreground)' }}>{l.city}</td>
-              <td className="pr-3">
-                <span className="rounded-full border px-2 py-0.5 text-[10px] uppercase"
-                  style={{ borderColor: 'var(--color-border)', color: STATUS_COLOR[l.lead_status] ?? 'var(--color-foreground)' }}>
-                  {l.lead_status}{l.fail_reason ? ` · ${l.fail_reason}` : ''}
-                </span>
-              </td>
-              <td className="pr-3" style={{ color: 'var(--color-muted-foreground)' }}>{l.qa_score ?? '–'}</td>
-              <td className="pr-3" style={{ color: l.opened_at ? 'var(--color-success)' : 'var(--color-muted-foreground)' }}>
-                {l.opened_at ? 'yes' : '–'}
-              </td>
-              <td className="pr-3" style={{ color: l.reply_sentiment === 'positive' ? 'var(--color-success)' : 'var(--color-muted-foreground)' }}>
-                {l.reply_sentiment ?? '–'}
-              </td>
-              <td style={{ color: 'var(--color-muted-foreground)' }}>{l.updated_at?.slice(5, 16)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 export function PipelineScreen({ replyQueue, onStateChanged }) {
   const [data, setData] = useState(null)
+  const [selectedLead, setSelectedLead] = useState(null)
 
   const refresh = useCallback(async () => {
     try { setData(await fetchPipeline()) } catch { /* engine offline — App shows the banner */ }
@@ -247,12 +289,16 @@ export function PipelineScreen({ replyQueue, onStateChanged }) {
           </button>
         </div>
       )}
+      <KanbanBoard leads={data.leads} onOpen={setSelectedLead} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Funnel funnel={data.funnel} />
         <ReplyDesk leads={data.leads} onChanged={onChanged} />
       </div>
       <FollowupQueue replyQueue={replyQueue} onChanged={onChanged} />
-      <LeadTable leads={data.leads} />
+
+      {selectedLead && (
+        <LeadDetail leadId={selectedLead} onClose={() => setSelectedLead(null)} />
+      )}
     </div>
   )
 }

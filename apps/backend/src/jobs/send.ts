@@ -1,6 +1,7 @@
 // Outreach dispatch — compliance is enforced HERE, at the door, not upstream.
 // Every send: suppression check, daily cap, unsubscribe + postal footer.
 // SEND_MODE=mock stamps the DB and goes nowhere; =resend delivers for real.
+import { readFileSync, existsSync } from 'node:fs'
 import { db } from '../core/database.js'
 import {
   AGENT_MODE, SEND_MODE, RESEND_API_KEY, SEND_FROM, DAILY_SEND_CAP, BUSINESS_POSTAL_ADDRESS, REPLY_TO,
@@ -30,18 +31,63 @@ function sentToday(): number {
   ).get() as any).n
 }
 
-export async function deliver(to: string, subject: string, body: string): Promise<string> {
+const esc = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+// HTML alternative body: the drafted prose verbatim, then the branded mockup
+// snapshot inline (referenced by CID), then the same compliance footer the
+// text part carries. Deliberately minimal markup — cold email that looks
+// designed gets filtered; this should look like a person attached a picture.
+function renderHtmlBody(body: string, companyName: string, hasSnapshot: boolean): string {
+  const paragraphs = body.trim().split(/\n{2,}/)
+    .map(p => `<p style="margin:0 0 14px 0;">${esc(p).replace(/\n/g, '<br>')}</p>`)
+    .join('\n')
+  const image = hasSnapshot
+    ? `<div style="margin:18px 0 6px 0;">
+        <img src="cid:fieldstone-preview" alt="Preview of ${esc(companyName)}'s operations screen, in your branding"
+             width="560" style="max-width:100%;border:1px solid #e2e8f0;border-radius:10px;display:block;">
+        <p style="margin:6px 0 0 0;font-size:12px;color:#64748b;">Built from your site — your colors, your logo. Sample data.</p>
+      </div>`
+    : ''
+  const address = BUSINESS_POSTAL_ADDRESS ||
+    (SEND_MODE === 'mock' ? '[postal address placeholder — required before real sends]' : '')
+  return `<div style="font-family:Georgia,serif;font-size:15px;line-height:1.55;color:#1a202c;max-width:640px;">
+${paragraphs}
+${image}
+<p style="margin:22px 0 0 0;font-size:12px;color:#94a3b8;">—<br>Fieldstone Web Co · ${esc(address)}<br>Don't want to hear from me again? Just reply &quot;stop&quot; and you never will.</p>
+</div>`
+}
+
+export interface DeliverOptions {
+  companyName?: string
+  snapshotPath?: string | null   // PNG on disk -> embedded via CID attachment
+}
+
+export async function deliver(to: string, subject: string, body: string, opts: DeliverOptions = {}): Promise<string> {
   if (SEND_MODE === 'mock') return `mock_${Date.now()}`
   if (SEND_MODE === 'resend') {
     if (!RESEND_API_KEY) throw new Error('SEND_MODE=resend requires RESEND_API_KEY')
     if (!BUSINESS_POSTAL_ADDRESS) throw new Error('Real sends require BUSINESS_POSTAL_ADDRESS (CAN-SPAM)')
+    const hasSnapshot = !!(opts.snapshotPath && existsSync(opts.snapshotPath))
+    // body arrives WITHOUT the footer; each alternative part appends its own
+    // (text gets the plain footer, html renders it styled) — never both.
+    const payload: any = {
+      from: SEND_FROM, to: [to], subject,
+      text: body + complianceFooter(),
+      html: renderHtmlBody(body, opts.companyName ?? 'your company', hasSnapshot),
+      ...(REPLY_TO ? { reply_to: REPLY_TO } : {}),
+    }
+    if (hasSnapshot) {
+      payload.attachments = [{
+        filename: 'your-preview.png',
+        content: readFileSync(opts.snapshotPath!).toString('base64'),
+        content_id: 'fieldstone-preview',
+      }]
+    }
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { authorization: `Bearer ${RESEND_API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        from: SEND_FROM, to: [to], subject, text: body,
-        ...(REPLY_TO ? { reply_to: REPLY_TO } : {}),
-      }),
+      body: JSON.stringify(payload),
     })
     if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`)
     return ((await res.json()) as any).id
@@ -71,7 +117,7 @@ export async function sendValidated(source = 'manual'): Promise<{ sent: number; 
   }
 
   const queue = db.prepare(
-    `SELECT o.id, o.subject, o.body, l.id AS lead_id, l.company_name, l.contact_email
+    `SELECT o.id, o.subject, o.body, o.snapshot_path, l.id AS lead_id, l.company_name, l.contact_email
      FROM outreach_emails o JOIN leads l ON l.id = o.lead_id
      WHERE l.lead_status = 'validated' AND o.approved_by = 'human' AND o.sent_at IS NULL
      ORDER BY o.created_at`,
@@ -97,7 +143,8 @@ export async function sendValidated(source = 'manual'): Promise<{ sent: number; 
       continue
     }
     try {
-      const messageId = await deliver(q.contact_email, q.subject, q.body + complianceFooter())
+      const messageId = await deliver(q.contact_email, q.subject, q.body,
+        { companyName: q.company_name, snapshotPath: q.snapshot_path })
       db.prepare(`UPDATE outreach_emails SET sent_at = CURRENT_TIMESTAMP, resend_message_id = ? WHERE id = ?`)
         .run(messageId, q.id)
       db.prepare(`UPDATE leads SET lead_status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(q.lead_id)

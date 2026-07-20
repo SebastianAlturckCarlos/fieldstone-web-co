@@ -121,7 +121,8 @@ export function resumeSends(): void {
 
 export async function sendFollowup(replyDraftId: number): Promise<{ ok: boolean; error?: string }> {
   const d = db.prepare(
-    `SELECT rd.id, rd.suggested_reply, rd.status, o.subject, l.company_name, l.contact_email, l.id AS lead_id
+    `SELECT rd.id, rd.suggested_reply, rd.status, o.subject, o.snapshot_path,
+            l.company_name, l.contact_email, l.id AS lead_id
      FROM reply_drafts rd
      JOIN outreach_emails o ON o.id = rd.outreach_id
      JOIN leads l ON l.id = rd.lead_id
@@ -141,9 +142,10 @@ export async function sendFollowup(replyDraftId: number): Promise<{ ok: boolean;
     return { ok: false, error: 'address is suppressed' }
 
   // Follow-ups ride the reply thread — no cold-email footer requirements, but
-  // we keep the opt-out line anyway. Visual proof (screenshots, before/after)
-  // belongs here, where deliverability no longer gates it.
-  await deliver(d.contact_email, `Re: ${d.subject}`, d.suggested_reply)
+  // we keep the opt-out line anyway. The branded preview rides along again as
+  // visual proof, where deliverability no longer gates it.
+  await deliver(d.contact_email, `Re: ${d.subject}`, d.suggested_reply,
+    { companyName: d.company_name, snapshotPath: d.snapshot_path })
   db.prepare(`UPDATE reply_drafts SET status='sent', sent_at=CURRENT_TIMESTAMP WHERE id = ?`).run(d.id)
   emitEvent('feed', { msg: `follow-up sent: ${d.company_name}`, kind: 'sent' })
   emitEvent('pulse', { n: 5 })

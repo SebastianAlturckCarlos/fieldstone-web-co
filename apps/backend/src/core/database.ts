@@ -17,3 +17,5 @@ function ensureColumn(table: string, column: string, ddl: string) {
   if (!cols.some(c => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
 }
 ensureColumn('outreach_emails', 'consult_json', 'consult_json TEXT')
+ensureColumn('outreach_emails', 'snapshot_path', 'snapshot_path TEXT')
+ensureColumn('leads', 'brand_json', 'brand_json TEXT')

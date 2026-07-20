@@ -18,5 +18,6 @@ apps/backend/*.db-shm
 apps/backend/*.db-wal
 apps/backend/serve.log
 apps/backend/dist/
+apps/backend/snapshots/
 apps/dashboard/node_modules/
 apps/dashboard/dist/

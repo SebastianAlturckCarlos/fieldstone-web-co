@@ -11,6 +11,7 @@ import { emitEvent, onEvent } from './core/events.js'
 import { tick } from './core/orchestrator.js'
 import { BudgetExceeded } from './core/ledger.js'
 import { sendValidated, sendPausedReason } from './jobs/send.js'
+import { snapshotFile } from './core/snapshot.js'
 import { classifyReply, recordEngagement, resumeSends, sendFollowup, dismissFollowup } from './jobs/replies.js'
 import { runDigest } from './jobs/digest.js'
 import { runDevAgentCycle } from './jobs/dev_agent.js'
@@ -96,17 +97,20 @@ function getState() {
     funnel[r.s] = r.n
 
   const approvals = (db.prepare(
-    `SELECT o.id, o.lead_id, o.subject, o.body, o.qa_score, o.consult_json, l.company_name, l.trade, l.city, l.audit_json
+    `SELECT o.id, o.lead_id, o.subject, o.body, o.qa_score, o.consult_json, o.snapshot_path,
+            l.company_name, l.trade, l.city, l.audit_json, l.brand_json
      FROM outreach_emails o JOIN leads l ON l.id = o.lead_id
      WHERE o.approved_by IS NULL AND o.sent_at IS NULL AND l.lead_status = 'drafted'
      ORDER BY o.created_at`,
   ).all() as any[]).map(a => {
     let flaws: any[] = []
     let consult: any = null
+    let brand: any = null
     try { flaws = (JSON.parse(a.audit_json ?? '{}').flaws ?? []).map((f: any) => ({ type: f.type, severity: f.severity, detail: f.detail })) } catch {}
     try { consult = a.consult_json ? JSON.parse(a.consult_json) : null } catch {}
-    const { audit_json, consult_json, ...rest } = a
-    return { ...rest, flaws, consult }
+    try { brand = a.brand_json ? JSON.parse(a.brand_json) : null } catch {}
+    const { audit_json, consult_json, snapshot_path, brand_json, ...rest } = a
+    return { ...rest, flaws, consult, brand, has_snapshot: !!snapshot_path }
   })
 
   const today = db.prepare(
@@ -159,8 +163,9 @@ function getPipeline() {
   }))
 
   const leads = db.prepare(
-    `SELECT l.id, l.company_name, l.trade, l.city, l.lead_status, l.fail_reason, l.updated_at,
-            o.id AS outreach_id, o.qa_score, o.sent_at, o.opened_at, o.reply_sentiment
+    `SELECT l.id, l.company_name, l.trade, l.city, l.lead_status, l.fail_reason, l.updated_at, l.created_at,
+            o.id AS outreach_id, o.qa_score, o.sent_at, o.opened_at, o.reply_sentiment,
+            CASE WHEN o.snapshot_path IS NOT NULL THEN 1 ELSE 0 END AS has_snapshot
      FROM leads l
      LEFT JOIN outreach_emails o ON o.id = (
        SELECT id FROM outreach_emails WHERE lead_id = l.id ORDER BY id DESC LIMIT 1
@@ -169,6 +174,47 @@ function getPipeline() {
   ).all()
 
   return { funnel: withConversion, leads, sendPaused: sendPausedReason() }
+}
+
+// Drill-down for one lead: everything the pipeline detail view shows — the
+// audit evidence, brand assets, every draft with its agent chain, and the
+// per-lead run ledger (the "agent reasoning" timeline).
+function getLeadDetail(id: string) {
+  const lead = db.prepare(`SELECT * FROM leads WHERE id = ?`).get(id) as any
+  if (!lead) return null
+  let audit: any = null, brand: any = null
+  try { audit = lead.audit_json ? JSON.parse(lead.audit_json) : null } catch {}
+  try { brand = lead.brand_json ? JSON.parse(lead.brand_json) : null } catch {}
+
+  const emails = (db.prepare(
+    `SELECT id, subject, body, qa_score, approved_by, sent_at, opened_at, replied_at,
+            reply_sentiment, consult_json, snapshot_path, created_at
+     FROM outreach_emails WHERE lead_id = ? ORDER BY id DESC`,
+  ).all(id) as any[]).map(e => {
+    let consult: any = null
+    try { consult = e.consult_json ? JSON.parse(e.consult_json) : null } catch {}
+    const { consult_json, snapshot_path, ...rest } = e
+    return { ...rest, consult, has_snapshot: !!snapshot_path }
+  })
+
+  const runs = db.prepare(
+    `SELECT agent_id, model, mode, input_tokens, output_tokens, duration_ms, ran_at
+     FROM agent_runs WHERE lead_id = ? ORDER BY id`,
+  ).all(id)
+
+  // QA rejections + failures the engine remembered about this lead — the
+  // visible trace of the agents arguing before the draft you see.
+  const memory = (db.prepare(
+    `SELECT vector_tag, memory_payload, timestamp FROM episodic_memory
+     WHERE lead_id = ? ORDER BY id`,
+  ).all(id) as any[]).map(m => {
+    let payload: any = null
+    try { payload = JSON.parse(m.memory_payload) } catch { payload = m.memory_payload }
+    return { tag: m.vector_tag, payload, at: m.timestamp }
+  })
+
+  const { audit_json, brand_json, ...leadRest } = lead
+  return { ...leadRest, audit, brand, emails, runs, memory }
 }
 
 function getAgentDetail(id: string) {
@@ -305,6 +351,22 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/growth') return json(res, 200, getGrowth())
 
   if (req.method === 'GET' && url.pathname === '/api/pipeline') return json(res, 200, getPipeline())
+
+  const leadMatch = url.pathname.match(/^\/api\/leads\/([\w-]+)$/)
+  if (req.method === 'GET' && leadMatch) {
+    const detail = getLeadDetail(leadMatch[1])
+    return detail ? json(res, 200, detail) : json(res, 404, { error: 'unknown lead' })
+  }
+
+  // Branded mockup snapshots for the approval cards + lead drill-down.
+  // Lead id is regex-constrained — no path traversal possible.
+  const snapMatch = url.pathname.match(/^\/api\/snapshots\/([\w-]+)\.png$/)
+  if (req.method === 'GET' && snapMatch) {
+    const file = snapshotFile(snapMatch[1])
+    if (!existsSync(file)) return json(res, 404, { error: 'no snapshot for this lead' })
+    res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-cache' })
+    return res.end(readFileSync(file))
+  }
 
   // A reply pasted into the dashboard (works today, no public URL needed)
   const replyMatch = url.pathname.match(/^\/api\/replies\/(\d+)$/)

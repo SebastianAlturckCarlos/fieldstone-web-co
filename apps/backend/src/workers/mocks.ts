@@ -130,13 +130,13 @@ export function mockAgent(agentId: string, payload: any): { output: any; inputTo
       const audit = payload.audit
       const revised = payload.feedback ? ' (revised)' : ''
       const [f1, f2] = audit.flaws
-      const demoLine = payload.demo_link
-        ? `\n\nWe went ahead and mocked up what ${audit.company}'s operations screen would look like — it's live here: ${payload.demo_link}`
+      const previewLine = payload.preview?.attached
+        ? `\n\nWent ahead and mocked up what ${audit.company}'s dispatch screen would look like — picture below, your colors on it.`
         : ''
       return {
         output: {
           subject: `${audit.company} after-hours calls`,
-          body: `Quick one${revised} — pulled up the ${audit.company} site from a job board. ${f1.detail}. That's the first place a homeowner with a burst pipe gives up and calls whoever answers. Also: ${f2.detail.toLowerCase()}.${demoLine}\n\nWe build the operational side for ${audit.trade} shops your size — 15 minutes this week to walk through it?`,
+          body: `Quick one${revised} — pulled up the ${audit.company} site from a job board. ${f1.detail}. That's the first place a homeowner with a burst pipe gives up and calls whoever answers. Also: ${f2.detail.toLowerCase()}.${previewLine}\n\nWe build the operational side for ${audit.trade} shops your size — 15 minutes this week to walk through it?`,
         },
         inputTokens: 640, outputTokens: 210,
       }
@@ -164,7 +164,7 @@ export function mockAgent(agentId: string, payload: any): { output: any; inputTo
         output: {
           click_score: score,
           notes: score >= 80 ? [] : [
-            'Lead with the demo link’s promise earlier — the personal preview is the hook, not the audit.',
+            'Set up the embedded preview earlier — the branded screenshot is the hook, not the audit.',
             `Subject could name the payoff: "${payload.trade ?? 'trade'} calls you’re missing" beats a company-name-only line.`,
           ],
           subject_alt: score >= 80 ? null : `${(payload.trade ?? 'trade')} calls you’re missing`,

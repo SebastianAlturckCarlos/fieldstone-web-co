@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS leads (
         'validated','sent','converted','failed')) DEFAULT 'pending',
     fail_reason TEXT,
     audit_json TEXT,
+    brand_json TEXT,                              -- scraped brand assets: {primary_color, logo_url, palette}
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS outreach_emails (
     replied_at TIMESTAMP,
     reply_sentiment TEXT,
     consult_json TEXT,                            -- Sales Rep click-through review of the draft
+    snapshot_path TEXT,                           -- branded UI-mockup screenshot embedded in the email
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

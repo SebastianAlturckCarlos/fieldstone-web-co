@@ -13,12 +13,12 @@ import { synapseBus } from '../lib/synapseBus.js'
 import { detectSoftwareGL, QUALITY_LOCK_KEY } from './SynapseCore.jsx'
 
 const NODES = [
-  { id: 'ceo_agent', label: 'CEO', pos: [0, 1.55, 0], size: 0.34 },
-  { id: 'researcher_agent', label: 'RES', pos: [-2.5, -0.55, 0.1], size: 0.22 },
-  { id: 'cmo_agent', label: 'CMO', pos: [-1.25, -1.05, 0.45], size: 0.22 },
-  { id: 'sales_rep_agent', label: 'SLS', pos: [0, -1.25, 0.6], size: 0.22 },
-  { id: 'analytics_agent', label: 'ANL', pos: [1.25, -1.05, 0.45], size: 0.22 },
-  { id: 'dev_agent', label: 'DEV', pos: [2.5, -0.55, 0.1], size: 0.22 },
+  { id: 'ceo_agent', name: 'CEO Agent', role: 'quality gate · command', pos: [0, 1.55, 0], size: 0.34, labelOff: 8.5 },
+  { id: 'researcher_agent', name: 'Researcher', role: 'site audits', pos: [-2.5, -0.55, 0.1], size: 0.22, labelOff: 5 },
+  { id: 'cmo_agent', name: 'CMO Agent', role: 'outreach copy', pos: [-1.25, -1.05, 0.45], size: 0.22, labelOff: 5 },
+  { id: 'sales_rep_agent', name: 'Sales Rep', role: 'replies · conversion', pos: [0, -1.25, 0.6], size: 0.22, labelOff: 5 },
+  { id: 'analytics_agent', name: 'Analytics', role: 'daily digest', pos: [1.25, -1.05, 0.45], size: 0.22, labelOff: 5 },
+  { id: 'dev_agent', name: 'Dev Agent', role: 'skill factory', pos: [2.5, -0.55, 0.1], size: 0.22, labelOff: 5 },
 ]
 // The actual pipeline: audit -> draft -> QA -> consult/dispatch, plus the
 // CEO's supervision spokes.
@@ -81,7 +81,7 @@ function OrgGraph({ roster, onNode, labelRefs, cheap }) {
       if (!el) return
       v.set(n.pos[0], n.pos[1] + (group.current?.position.y ?? 0), n.pos[2]).project(state.camera)
       el.style.left = `${(v.x * 0.5 + 0.5) * 100}%`
-      el.style.top = `${(-v.y * 0.5 + 0.5) * 100 + 4.5}%`
+      el.style.top = `${(-v.y * 0.5 + 0.5) * 100 + n.labelOff}%`
     })
   })
 
@@ -172,26 +172,56 @@ export function ImmersionView({ roster, onSelectAgent, onOpenCeo, onClose }) {
   return (
     <div className="fixed inset-0 z-30" role="dialog" aria-modal="true"
       style={{ background: 'radial-gradient(ellipse at 50% 35%, #071228 0%, #020617 70%)' }}>
-      <div className="absolute top-5 left-1/2 z-10 -translate-x-1/2 text-center pointer-events-none">
-        <h2 className="label glow-text" style={{ color: 'var(--color-accent)' }}>Inside the Synapse</h2>
-        <p className="mt-1 font-mono text-[10px]" style={{ color: 'var(--color-muted-foreground)' }}>
-          click an agent · CEO opens the command console · Esc to exit
-        </p>
+      <div className="pointer-events-none absolute top-6 left-1/2 z-10 -translate-x-1/2 text-center"
+        style={{ animation: 'feed-in 500ms cubic-bezier(0.16,1,0.3,1) both' }}>
+        <h2 className="font-display text-lg font-semibold uppercase tracking-[0.35em] glow-text"
+          style={{ color: 'var(--color-foreground)' }}>
+          Inside the Synapse
+        </h2>
       </div>
+      <p className="pointer-events-none absolute bottom-6 left-1/2 z-10 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.2em]"
+        style={{ color: 'var(--color-muted-foreground)', animation: 'feed-in 500ms 200ms cubic-bezier(0.16,1,0.3,1) both' }}>
+        click an agent · crown node opens command · esc exits
+      </p>
       <button onClick={onClose} aria-label="Exit the Synapse"
         className="absolute top-4 right-4 z-10 rounded-lg border p-2"
         style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', background: 'rgba(2,6,23,0.6)' }}>
         <X size={16} />
       </button>
 
-      {/* HTML labels, positioned every frame from the 3D projection */}
-      {NODES.map((n, i) => (
-        <div key={n.id} ref={el => (labelRefs.current[i] = el)}
-          className="pointer-events-none absolute z-10 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.25em]"
-          style={{ color: i === 0 ? 'var(--color-accent)' : 'var(--color-muted-foreground)' }}>
-          {n.label}
-        </div>
-      ))}
+      {/* Agent nameplates — HTML, repositioned every frame from the 3D
+          projection. Names carry the hierarchy: the CEO reads first from
+          across the room, workers read at a glance, roles whisper below. */}
+      {NODES.map((n, i) => {
+        const status = roster?.find(r => r.id === n.id)?.status ?? 'idle'
+        const running = status === 'run'
+        return (
+          <div key={n.id} ref={el => (labelRefs.current[i] = el)}
+            className="pointer-events-none absolute z-10 -translate-x-1/2 text-center"
+            style={{ animation: `feed-in 400ms ${250 + i * 90}ms cubic-bezier(0.16,1,0.3,1) both` }}>
+            <div className="font-display font-semibold"
+              style={{
+                fontSize: i === 0 ? 22 : 15,
+                letterSpacing: '0.06em',
+                color: i === 0 ? 'var(--color-accent)' : running ? 'var(--color-foreground)' : 'var(--color-muted-foreground)',
+                textShadow: i === 0
+                  ? '0 0 18px rgba(34,211,238,0.8), 0 0 46px rgba(14,165,233,0.5)'
+                  : running ? '0 0 14px rgba(56,189,248,0.55)' : 'none',
+              }}>
+              {n.name}
+            </div>
+            <div className="mt-1 flex items-center justify-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.28em]"
+              style={{ color: 'var(--color-muted-foreground)' }}>
+              <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{
+                  background: running ? 'var(--color-success)' : 'var(--color-muted)',
+                  boxShadow: running ? '0 0 8px var(--color-success)' : 'none',
+                }} />
+              {n.role} · {status}
+            </div>
+          </div>
+        )
+      })}
 
       {/* key: antialias/dpr are construction-time options — flipping to cheap
           mid-flight (software-GL detection) needs a clean canvas rebuild */}

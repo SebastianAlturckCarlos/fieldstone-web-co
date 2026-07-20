@@ -2,10 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Zap, Crown, Sparkles } from 'lucide-react'
 import { fetchState, openEventStream } from './lib/api.js'
 import { SynapseCore } from './components/SynapseCore.jsx'
-import { AgentRoster } from './components/AgentRoster.jsx'
 import { AgentDetail } from './components/AgentDetail.jsx'
-import { ActivityFeed } from './components/ActivityFeed.jsx'
-import { KpiTile } from './components/KpiTile.jsx'
 import { GrowthScreen } from './components/GrowthScreen.jsx'
 import { PipelineScreen } from './components/PipelineScreen.jsx'
 import { CEOCommand } from './components/CEOCommand.jsx'
@@ -18,10 +15,12 @@ export default function App() {
   const [alert, setAlert] = useState(null)
   const [offline, setOffline] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState(null)
-  const [showCeo, setShowCeo] = useState(false)
   const [immersed, setImmersed] = useState(false)
   const [jarvis, setJarvis] = useState(false)
-  const [view, setView] = useState('mission') // 'mission' | 'pipeline' | 'growth'
+  // The landing is deliberately minimal: header + sphere, nothing else.
+  // Everything operational (roster, feed, KPIs, queues, controls) lives in
+  // the CEO tab — a first-class view, not a modal.
+  const [view, setView] = useState('mission') // 'mission' | 'ceo' | 'pipeline' | 'growth'
   const keyRef = useRef(0)
 
   const refresh = useCallback(async () => {
@@ -46,18 +45,19 @@ export default function App() {
     return () => { close(); clearInterval(poll) }
   }, [refresh])
 
-  // Roster click: the CEO opens the command console (the human's one job);
-  // workers open their detail panels.
-  const onSelectRosterAgent = useCallback(id => {
-    if (id === 'ceo_agent') setShowCeo(true)
-    else setSelectedAgent(id)
-  }, [])
+  const openCeo = useCallback(() => { setImmersed(false); setView('ceo') }, [])
 
-  const funnel = state?.funnel ?? {}
+  // Roster click (from the CEO tab or inside the sphere): the CEO opens the
+  // command view; workers open their detail panels.
+  const onSelectRosterAgent = useCallback(id => {
+    if (id === 'ceo_agent') openCeo()
+    else setSelectedAgent(id)
+  }, [openCeo])
+
   const pendingDecisions = (state?.approvals?.length ?? 0) + (state?.replyQueue?.length ?? 0)
 
   return (
-    <div className="mx-auto min-h-screen max-w-7xl px-4 py-4 flex flex-col gap-4">
+    <div className="mx-auto min-h-screen max-w-[1600px] px-4 py-4 flex flex-col gap-4">
       <header className="panel flex items-center gap-4 px-5 py-3">
         <span aria-hidden className="h-3 w-3 rotate-45"
           style={{ background: 'var(--color-primary)', boxShadow: '0 0 10px var(--color-primary)' }} />
@@ -100,9 +100,11 @@ export default function App() {
           <Sparkles size={13} /> JARVIS
         </button>
         <button
-          onClick={() => setShowCeo(true)}
+          onClick={() => setView(view === 'ceo' ? 'mission' : 'ceo')}
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-transform duration-150 active:scale-[0.97]"
-          style={{ background: 'var(--color-primary)', color: '#020617' }}
+          style={view === 'ceo'
+            ? { background: 'var(--color-accent)', color: '#020617', boxShadow: '0 0 24px rgba(34,211,238,0.35)' }
+            : { background: 'var(--color-primary)', color: '#020617' }}
         >
           <Crown size={14} />
           CEO{pendingDecisions > 0 ? ` (${pendingDecisions})` : ''}
@@ -114,31 +116,42 @@ export default function App() {
           ⚠ {alert}
         </div>
       )}
-      {state?.sendPaused && (
+      {state?.sendPaused && view !== 'ceo' && (
         <div className="panel px-4 py-2 font-mono text-sm" style={{ color: 'var(--color-warning)' }}>
           ⚠ {state.sendPaused}
         </div>
       )}
 
       {view === 'mission' ? (
-        <main className="grid flex-1 gap-4 lg:grid-cols-[240px_1fr_300px]">
-          <AgentRoster roster={state?.roster ?? []} onSelect={onSelectRosterAgent} />
-          <div className="flex flex-col gap-4 min-w-0">
-            <SynapseCore onActivate={() => setImmersed(true)} />
-            {pendingDecisions > 0 && (
-              <button onClick={() => setShowCeo(true)}
-                className="panel panel--active flex items-center gap-3 px-4 py-3 text-left transition-transform duration-150 active:scale-[0.99]">
-                <Crown size={15} style={{ color: 'var(--color-accent)' }} />
-                <span className="font-display text-sm">
-                  {pendingDecisions} decision{pendingDecisions === 1 ? '' : 's'} waiting in the CEO console
-                </span>
-                <span className="ml-auto font-mono text-[10px] uppercase" style={{ color: 'var(--color-muted-foreground)' }}>
-                  open →
-                </span>
-              </button>
-            )}
-          </div>
-          <ActivityFeed items={feed} />
+        <main className="relative" style={{ height: 'calc(100dvh - 130px)', minHeight: 560 }}>
+          <SynapseCore onActivate={() => setImmersed(true)} />
+          {pendingDecisions > 0 && (
+            <button onClick={openCeo}
+              className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2.5 rounded-full border px-5 py-2.5 transition-transform duration-150 active:scale-[0.97]"
+              style={{
+                borderColor: 'rgba(56,189,248,0.4)',
+                background: 'rgba(2,6,23,0.72)',
+                backdropFilter: 'blur(10px)',
+                boxShadow: '0 0 32px rgba(14,165,233,0.18)',
+              }}>
+              <Crown size={14} style={{ color: 'var(--color-accent)' }} />
+              <span className="font-display text-sm">
+                {pendingDecisions} decision{pendingDecisions === 1 ? '' : 's'} waiting
+              </span>
+              <span className="font-mono text-[10px] uppercase" style={{ color: 'var(--color-muted-foreground)' }}>
+                open console →
+              </span>
+            </button>
+          )}
+        </main>
+      ) : view === 'ceo' ? (
+        <main className="flex-1">
+          <CEOCommand
+            state={state}
+            feed={feed}
+            onChanged={refresh}
+            onSelectAgent={onSelectRosterAgent}
+          />
         </main>
       ) : view === 'pipeline' ? (
         <main className="flex-1">
@@ -154,13 +167,9 @@ export default function App() {
         <ImmersionView
           roster={state?.roster ?? []}
           onSelectAgent={setSelectedAgent}
-          onOpenCeo={() => setShowCeo(true)}
+          onOpenCeo={openCeo}
           onClose={() => setImmersed(false)}
         />
-      )}
-
-      {showCeo && (
-        <CEOCommand state={state} onChanged={refresh} onClose={() => setShowCeo(false)} />
       )}
 
       {selectedAgent && (
@@ -168,26 +177,6 @@ export default function App() {
       )}
 
       {jarvis && <JarvisPanel onChanged={refresh} onClose={() => setJarvis(false)} />}
-
-      <footer className="grid grid-cols-2 gap-4 md:grid-cols-5">
-        <KpiTile label="Pending" value={funnel.pending ?? '–'} />
-        <KpiTile label="Drafted" value={funnel.drafted ?? '–'} accent />
-        <KpiTile label="Validated" value={funnel.validated ?? '–'} />
-        <KpiTile label="Sent / Converted" value={`${funnel.sent ?? 0} / ${funnel.converted ?? 0}`} />
-        {state?.mode === 'api' ? (
-          <KpiTile
-            label="API Spend Today"
-            value={`$${(state?.spend.today ?? 0).toFixed(2)}`}
-            sub={`cap $${state?.spend.cap ?? '–'} · ${state?.tokens.runs ?? 0} runs`}
-          />
-        ) : (
-          <KpiTile
-            label="Engine Cost"
-            value="$0.00"
-            sub={`${state?.mode === 'claude-code' ? 'Claude subscription' : 'dry-run'} · ${state?.tokens.runs ?? 0} runs · no per-token billing`}
-          />
-        )}
-      </footer>
     </div>
   )
 }

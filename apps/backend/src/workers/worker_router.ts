@@ -84,7 +84,6 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
 
   const system = interpolate(p.system, {
     qa_threshold: String(QA_THRESHOLD),
-    demo_link: process.env.DEMO_LINK ?? '',
     calendar_link: process.env.CALENDAR_LINK ?? '',
   })
 
@@ -106,12 +105,13 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
     // newlines. Static args + piped stdin sidesteps both, on every platform.
     // Our agents are single-shot text generators. Deny the agentic tools
     // outright (the Dev Agent once spent 14 turns trying to Write its skill
-    // file to disk itself), keep a small turn buffer, and give the
-    // file-writing Dev Agent triple the clock.
-    const timeoutMs = agentId === 'dev_agent' ? 540_000 : 180_000
+    // file to disk itself). This engine runs on a dedicated workstation:
+    // generous turn buffer and clock so deep reasoning is never cut short —
+    // the subscription's hard-stop is the only real ceiling.
+    const timeoutMs = agentId === 'dev_agent' ? 720_000 : 360_000
     const stdout = await new Promise<string>((resolve, reject) => {
       const child = spawn('claude',
-        ['-p', '--output-format', 'json', '--model', model, '--max-turns', '3',
+        ['-p', '--output-format', 'json', '--model', model, '--max-turns', '6',
          '--disallowedTools', 'Write,Edit,Bash,Read,Glob,Grep,WebFetch,WebSearch,Task,NotebookEdit'],
         { shell: true, timeout: timeoutMs })
       let out = ''

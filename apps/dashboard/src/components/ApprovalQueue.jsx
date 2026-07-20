@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { postAction } from '../lib/api.js'
+import { postAction, snapshotUrl } from '../lib/api.js'
 
 export function ApprovalQueue({ approvals, onChanged }) {
   const [openId, setOpenId] = useState(null)
@@ -80,6 +80,25 @@ export function ApprovalQueue({ approvals, onChanged }) {
                   style={{ background: 'var(--color-background)', color: 'var(--color-foreground)' }}>
                   {d.body}
                 </p>
+                {d.has_snapshot && (
+                  <div>
+                    <div className="label mb-1.5 flex items-center gap-2 text-[9px]">
+                      Embedded preview — their branding
+                      {d.brand?.primary_color && (
+                        <span className="inline-block h-3 w-3 rounded-full border"
+                          title={`brand ${d.brand.primary_color} (${d.brand.source})`}
+                          style={{ background: d.brand.primary_color, borderColor: 'var(--color-border)' }} />
+                      )}
+                    </div>
+                    <img
+                      src={snapshotUrl(d.lead_id)}
+                      alt={`Branded mockup preview for ${d.company_name} — this exact image is embedded in the email`}
+                      loading="lazy"
+                      className="w-full rounded-lg border"
+                      style={{ borderColor: 'var(--color-border)' }}
+                    />
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button
                     disabled={busy}
