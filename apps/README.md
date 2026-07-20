@@ -60,9 +60,22 @@ npm run dev                   # opens on :5180, proxies /api to :4600
 
 Open **http://localhost:5180**. The engine is fully autonomous — it ticks
 itself every 60s whenever leads are pending, drafts, QA-loops, and sends
-approved mail with no clicking required. Your job is the **CEO console**
+approved mail with no clicking required. Your job is the **CEO tab**
 (the crown button, or click CEO anywhere): read what the agents queued,
 approve or reject.
+
+### Branded snapshot previews (needs Chrome or Edge)
+
+Outreach emails no longer link to the live demo — each one **embeds a
+screenshot** of the prospect's operations screen mocked up in their own
+brand colors and logo (scraped during the audit). Rendering uses
+`puppeteer-core` driving the Chrome or Edge **already installed on your
+machine** — nothing extra to download. If neither is in a standard install
+path, set `SNAPSHOT_BROWSER_PATH` in `.env`. No browser found = the engine
+logs it once and emails ship as clean text; nothing breaks. PNGs land in
+`apps/backend/snapshots/` (gitignored), served at
+`/api/snapshots/{leadId}.png`, and shown on every approval card so you see
+exactly what the prospect will see before you approve.
 
 ## The cost model — read this before changing `AGENT_MODE`
 
@@ -98,17 +111,22 @@ npm run build    # production build -> dist/
 
 ## What the dashboard shows
 
-- **Mission Control** — the Synapse Core sphere (visualizes agent activity as
-  light; **click it to fly inside** — the org rendered spatially, Esc to
-  exit), the agent roster (workers open detail panels; **CEO opens the
-  command console**), and the live activity feed.
-- **CEO console** (crown button — your actual job) — the approval queue with
+- **Mission Control** — deliberately minimal: the header and a full-screen
+  Synapse Core sphere, nothing else (agent activity as light; **click it to
+  fly inside** — the org rendered spatially with full agent nameplates, Esc
+  to exit). When decisions are waiting, one floating pill appears over the
+  sphere. Everything operational lives in the CEO tab.
+- **CEO tab** (crown button — your actual job) — the approval queue with
   the full agent chain behind every draft (Researcher audited · CMO drafted ·
-  CEO scored · Sales Rep consulted), the follow-up queue, pause/resume
-  sends, and digest / Dev Agent triggers.
-- **Pipeline** — the 5-stage funnel with conversion % between stages, the
-  Reply Desk (paste a prospect reply → the Sales Rep classifies it), and the
-  dense lead table.
+  CEO scored · Sales Rep consulted) **and the exact branded preview image
+  embedded in that email**, the follow-up queue, the agent roster, the live
+  activity feed, the KPI strip, pause/resume sends, and digest / Dev Agent
+  triggers.
+- **Pipeline** — a clickable Kanban board (click any lead card for the full
+  drill-down: audit evidence, captured brand colors + logo, the snapshot as
+  sent, drafts with verdicts, and the agent-run timeline), plus the funnel
+  with conversion % between stages and the Reply Desk (paste a prospect
+  reply → the Sales Rep classifies it).
 - **Growth** — MRR milestone tracker, funnel counts, token-usage trend, the
   daily Analytics digest (also written to `vault/Financial Growth/` if you
   set up an Obsidian vault — see below), and the **Skill Factory** review
@@ -144,8 +162,9 @@ on your machine:
 
 `../Master_Blueprint.md` is the living plan — every sprint's status (shipped
 vs. in-progress vs. deferred) is recorded there as it happens, along with the
-full agent prompts, database schema, design tokens, and the remaining
-roadmap (Sprint 3 completion pending Resend/domain setup, then Sprint 5
-"Synapse Immersion" and Sprint 6 "JARVIS" — read the bottom of the doc for
-what those are). When you pick up work, update that file the same way as you
-go — it's the shared source of truth between whoever is building this.
+full agent prompts, database schema, design tokens, and the roadmap. Sprints
+1 through 8 have all shipped (Part VIII has the record per sprint; Sprint 8
+is the command-center UX + branded-snapshot outreach pivot). The dated logs
+in `../Project Context/` are the session-by-session history. When you pick
+up work, update both the same way as you go — they're the shared source of
+truth between whoever is building this.
