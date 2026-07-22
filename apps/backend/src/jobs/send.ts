@@ -4,7 +4,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { db } from '../core/database.js'
 import {
-  AGENT_MODE, SEND_MODE, RESEND_API_KEY, SEND_FROM, DAILY_SEND_CAP, BUSINESS_POSTAL_ADDRESS, REPLY_TO,
+  AGENT_MODE, SEND_MODE, RESEND_API_KEY, SEND_FROM, SENDER_NAME, DAILY_SEND_CAP, BUSINESS_POSTAL_ADDRESS, REPLY_TO,
 } from '../core/config.js'
 import { emitEvent } from '../core/events.js'
 
@@ -72,7 +72,7 @@ export async function deliver(to: string, subject: string, body: string, opts: D
     // body arrives WITHOUT the footer; each alternative part appends its own
     // (text gets the plain footer, html renders it styled) — never both.
     const payload: any = {
-      from: SEND_FROM, to: [to], subject,
+      from: SENDER_NAME ? `${SENDER_NAME} <${SEND_FROM}>` : SEND_FROM, to: [to], subject,
       text: body + complianceFooter(),
       html: renderHtmlBody(body, opts.companyName ?? 'your company', hasSnapshot),
       ...(REPLY_TO ? { reply_to: REPLY_TO } : {}),

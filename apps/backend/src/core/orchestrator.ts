@@ -12,6 +12,22 @@ import { AGENT_MODE } from './config.js'
 const BATCH_SIZE = 10
 const MAX_QA_LOOPS = 4
 
+// A subscription usage-limit hit (claude-code fallback path, or the Dev
+// Agent) looks like an ordinary thrown Error from the CLI, not a typed
+// BudgetExceeded — but it means the same thing: this is a PAUSE, not a
+// reason to permanently fail whatever lead happened to be mid-flight.
+const USAGE_LIMIT_RE = /\b429\b|usage limit|rate limit|quota exceeded/i
+
+function currentCompetitiveEdge(): string | null {
+  const row = db.prepare(`SELECT v FROM kv WHERE k = 'competitor_intel'`).get() as any
+  if (!row?.v) return null
+  try {
+    const notes = JSON.parse(row.v).notes as any[]
+    const best = notes?.find(n => n.fieldstone_angle)
+    return best?.fieldstone_angle ?? null
+  } catch { return null }
+}
+
 type Lead = {
   id: string; company_name: string; website_url: string; contact_email: string
   trade: string; city: string; lead_status: string
@@ -48,6 +64,7 @@ export async function tick() {
     return
   }
   console.log(`Claimed ${leads.length} lead(s).`)
+  const edge = currentCompetitiveEdge()
 
   for (const lead of leads) {
     try {
@@ -86,7 +103,7 @@ export async function tick() {
       let draft: any, verdict: any, feedback = ''
       for (let i = 0; i < MAX_QA_LOOPS; i++) {
         assertLeadUnderBudget(lead.id)
-        draft = await runAgent('cmo_agent', { audit, feedback, preview }, lead.id)
+        draft = await runAgent('cmo_agent', { audit, feedback, preview, edge }, lead.id)
         verdict = await runAgent('ceo_agent', { draft, audit }, lead.id)
         if (verdict.approved) break
         feedback = verdict.feedback
@@ -107,7 +124,7 @@ export async function tick() {
         if (consult && consult.click_score < 60) {
           console.log(`  [${lead.company_name}] consult ${consult.click_score} — one conversion revision`)
           const revised = await runAgent('cmo_agent', {
-            audit, feedback: `Sales Rep conversion notes: ${consult.notes?.join(' | ')}`, preview,
+            audit, feedback: `Sales Rep conversion notes: ${consult.notes?.join(' | ')}`, preview, edge,
           }, lead.id)
           const reVerdict = await runAgent('ceo_agent', { draft: revised, audit }, lead.id)
           if (reVerdict.approved) {
@@ -143,7 +160,19 @@ export async function tick() {
         console.log(`BUDGET STOP: ${err.message}`)
         return
       }
-      transition(lead, 'failed', { failReason: `error: ${(err as Error).message.slice(0, 120)}` })
+      const message = (err as Error).message ?? String(err)
+      if (USAGE_LIMIT_RE.test(message)) {
+        // The Claude subscription's usage limit, surfacing from the
+        // claude-code fallback path (Ollama unreachable) or the Dev Agent.
+        // This is a pause, exactly like BudgetExceeded — the lead did
+        // nothing wrong, requeue it and stop the tick rather than burying
+        // it under fail_reason='error:...' where it never gets a retry.
+        db.prepare(`UPDATE leads SET lead_status = 'pending' WHERE id = ?`).run(lead.id)
+        emitEvent('feed', { msg: `USAGE LIMIT — tick paused, lead requeued: ${message.slice(0, 140)}`, kind: 'alert' })
+        console.log(`USAGE LIMIT STOP: ${message}`)
+        return
+      }
+      transition(lead, 'failed', { failReason: `error: ${message.slice(0, 120)}` })
     }
   }
 }

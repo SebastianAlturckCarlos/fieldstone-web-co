@@ -25,7 +25,13 @@ export async function runDigest(source = 'manual'): Promise<{ day: string; markd
     `SELECT COUNT(*) n FROM outreach_emails WHERE date(sent_at) = date('now')`,
   ).get() as any).n
 
-  const payload = { day, funnel, ledger, sent: sentToday, opens: 0, replies: 0 }
+  let competitors: any[] = []
+  try {
+    const row = db.prepare(`SELECT v FROM kv WHERE k = 'competitor_intel'`).get() as any
+    if (row?.v) competitors = JSON.parse(row.v).notes ?? []
+  } catch { /* absent or malformed — digest still runs without it */ }
+
+  const payload = { day, funnel, ledger, sent: sentToday, opens: 0, replies: 0, competitors }
   const digest = await runAgent('analytics_agent', payload)
   const markdown = typeof digest === 'string' ? digest : digest.markdown
 

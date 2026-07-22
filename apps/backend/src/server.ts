@@ -15,6 +15,7 @@ import { snapshotFile } from './core/snapshot.js'
 import { classifyReply, recordEngagement, resumeSends, sendFollowup, dismissFollowup } from './jobs/replies.js'
 import { runDigest } from './jobs/digest.js'
 import { runDevAgentCycle } from './jobs/dev_agent.js'
+import { runCompetitorScan } from './jobs/competitor_scan.js'
 import { handleJarvis } from './jobs/jarvis.js'
 
 function readBody(req: http.IncomingMessage): Promise<any> {
@@ -37,6 +38,7 @@ const AGENTS = [
   ['sales_rep_agent', 'SLS', 'Classifies replies, flags hot leads'],
   ['analytics_agent', 'ANL', 'Daily digest: funnel, spend, anomalies'],
   ['dev_agent', 'DEV', 'Builds new skills when agents hit capability gaps'],
+  ['competitor_agent', 'CMP', 'Scans competitor sites for angles to capitalize on'],
 ] as const
 
 let tickRunning = false
@@ -278,7 +280,13 @@ function getGrowth() {
     `SELECT id, skill_name, description, status, code_body, created_at FROM system_skills ORDER BY created_at DESC`,
   ).all()
 
-  return { mrr, converted, tier1Price: TIER1_PRICE, milestones: MILESTONES, funnel, total, byDay, digest, skills }
+  let competitors: any = null
+  try {
+    const row = db.prepare(`SELECT v, updated_at FROM kv WHERE k = 'competitor_intel'`).get() as any
+    if (row?.v) competitors = { ...JSON.parse(row.v), updated_at: row.updated_at }
+  } catch { /* absent or malformed */ }
+
+  return { mrr, converted, tier1Price: TIER1_PRICE, milestones: MILESTONES, funnel, total, byDay, digest, skills, competitors }
 }
 
 function json(res: http.ServerResponse, code: number, body: any) {
@@ -441,6 +449,11 @@ const server = http.createServer(async (req, res) => {
     catch (err) { return json(res, 500, { error: (err as Error).message }) }
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/competitor-scan/run') {
+    try { return json(res, 200, await runCompetitorScan('manual')) }
+    catch (err) { return json(res, 500, { error: (err as Error).message }) }
+  }
+
   const skillMatch = url.pathname.match(/^\/api\/skills\/([\w-]+)\/(approve|disable)$/)
   if (req.method === 'POST' && skillMatch) {
     const [, skillId, action] = skillMatch
@@ -495,6 +508,17 @@ server.listen(PORT, () => {
         `SELECT 1 FROM system_skills WHERE date(created_at) = ?`,
       ).get(today)
       if (!alreadyRan) await runDevAgentCycle('scheduled')
+    }, 60 * 60 * 1000)
+
+    // Competitor scan: same weekly cadence, ahead of the Dev Agent so a
+    // fresh competitive angle is available all week (positioning/pricing
+    // pages don't move day to day — no reason to hit them more often).
+    setInterval(async () => {
+      if (new Date().getDay() !== 0) return // Sunday only
+      const today = new Date().toISOString().slice(0, 10)
+      const row = db.prepare(`SELECT updated_at FROM kv WHERE k = 'competitor_intel'`).get() as any
+      const alreadyRan = row?.updated_at && String(row.updated_at).slice(0, 10) === today
+      if (!alreadyRan) await runCompetitorScan('scheduled')
     }, 60 * 60 * 1000)
   }
 })

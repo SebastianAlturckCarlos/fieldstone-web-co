@@ -52,19 +52,33 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
     return output
   }
 
-  // ---- researcher prefers local Ollama outside dry-run ($0 tokens) ----
-  // If Ollama isn't installed/running on this machine, claude-code mode
-  // falls through to the subscription path below — same hard-stop cost
-  // model, no lead ever fails just because Qwen is absent.
+  const system = interpolate(p.system, {
+    qa_threshold: String(QA_THRESHOLD),
+    calendar_link: process.env.CALENDAR_LINK ?? '',
+  })
+
+  // ---- Ollama-hosted agents ($0 tokens, no subscription usage at all) ----
+  // Fieldstone runs its whole per-lead loop (research, QC, copy, consult,
+  // digest) on a free local model here — nothing in normal operation touches
+  // the Claude subscription. If Ollama isn't installed/running on this
+  // machine, claude-code mode falls through to the subscription path below
+  // as a downgrade, not a lead killer — same hard-stop cost model either way.
   const useOllama = p.provider === 'ollama' && (AGENT_MODE !== 'claude-code' || await ollamaUp())
   if (useOllama) {
+    // Only agents whose contract IS strict JSON get the grammar-constrained
+    // decode. The CEO speaks a plain-text verdict protocol and Analytics
+    // writes a markdown digest — forcing format:'json' on those would either
+    // break the model's ability to follow the prompt or corrupt the output.
+    const wantsJsonFormat = agentId !== 'ceo_agent' && agentId !== 'analytics_agent' && agentId !== 'dev_agent'
     try {
       const res = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         body: JSON.stringify({
-          model: p.model, stream: false, format: 'json',
+          model: p.model, stream: false,
+          ...(wantsJsonFormat ? { format: 'json' } : {}),
+          options: { num_predict: p.max_tokens ?? 1024 },
           messages: [
-            { role: 'system', content: p.system },
+            { role: 'system', content: system },
             { role: 'user', content: JSON.stringify(payload) },
           ],
         }),
@@ -73,7 +87,7 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
       // message — read it as one instead of crashing on res.message.content
       if (res.error || !res.message?.content) throw new Error(`Ollama: ${res.error ?? 'unexpected /api/chat response shape'}`)
       recordRun(agentId, p.model, 'ollama', 0, 0, Date.now() - started, leadId)
-      return JSON.parse(res.message.content)
+      return parseAgentOutput(agentId, res.message.content)
     } catch (err) {
       // In claude-code mode a broken Ollama is a downgrade, not a lead killer:
       // fall through to the subscription path (haiku). Other modes rethrow.
@@ -81,11 +95,6 @@ export async function runAgent(agentId: string, payload: any, leadId?: string): 
       console.log(`  [router] Ollama failed (${(err as Error).message.slice(0, 90)}) — ${agentId} via claude-code fallback`)
     }
   }
-
-  const system = interpolate(p.system, {
-    qa_threshold: String(QA_THRESHOLD),
-    calendar_link: process.env.CALENDAR_LINK ?? '',
-  })
 
   // ---- claude-code: headless `claude -p` on the SUBSCRIPTION ----
   // Costs nothing extra; when the subscription's usage limit is hit the CLI

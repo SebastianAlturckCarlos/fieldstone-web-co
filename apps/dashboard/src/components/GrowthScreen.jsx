@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw, Wrench } from 'lucide-react'
+import { RefreshCw, Wrench, Radar } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
@@ -179,6 +179,64 @@ function SkillReview({ skills, onChanged }) {
   )
 }
 
+function CompetitorIntel({ competitors, onChanged }) {
+  const [running, setRunning] = useState(false)
+  const notes = competitors?.notes ?? []
+
+  async function run() {
+    setRunning(true)
+    try {
+      await postAction('/api/competitor-scan/run')
+      onChanged?.()
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="panel p-4 lg:col-span-2">
+      <div className="mb-1 flex items-center">
+        <h2 className="label">
+          Competitor Intel{competitors?.scanned_at ? ` — ${competitors.scanned_at.slice(0, 10)}` : ''}
+        </h2>
+        <button onClick={run} disabled={running}
+          className="ml-auto flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-mono text-xs disabled:opacity-50"
+          style={{ borderColor: 'var(--color-border)', color: 'var(--color-accent)' }}>
+          <Radar size={12} className={running ? 'animate-spin' : ''} />
+          {running ? 'scanning…' : 'run scan'}
+        </button>
+      </div>
+      <p className="mb-3 font-mono text-[10px]" style={{ color: 'var(--color-muted-foreground)' }}>
+        Research + Analytics working the same angle from the outside: what ServiceTitan, Housecall Pro,
+        Jobber, FieldEdge, and Service Fusion show on their own public pages, and where Fieldstone's flat
+        $399 no-setup-fee model beats it. The sharpest angle feeds straight into the CMO's copy.
+      </p>
+      {notes.length === 0 ? (
+        <p className="font-mono text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+          No scan yet — runs automatically Sundays, or click run scan.
+        </p>
+      ) : (
+        <ul className="grid gap-2 md:grid-cols-2">
+          {notes.map(n => (
+            <li key={n.competitor} className="rounded-lg border p-3" style={{ borderColor: 'var(--color-border)' }}>
+              <div className="mb-1 flex items-baseline gap-2">
+                <span className="font-mono text-xs font-semibold">{n.competitor}</span>
+                {n.pricing_signal && (
+                  <span className="font-mono text-[10px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                    {n.pricing_signal}
+                  </span>
+                )}
+              </div>
+              <p className="mb-1 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{n.positioning}</p>
+              <p className="text-xs" style={{ color: 'var(--color-accent)' }}>→ {n.fieldstone_angle}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function DigestPanel({ digest, onRun }) {
   return (
     <div className="panel p-4">
@@ -227,6 +285,7 @@ export function GrowthScreen() {
       <TokenTrend byDay={growth.byDay} />
       <DigestPanel digest={growth.digest} onRun={runDigest} />
       <SkillReview skills={growth.skills} onChanged={refresh} />
+      <CompetitorIntel competitors={growth.competitors} onChanged={refresh} />
     </div>
   )
 }

@@ -85,8 +85,13 @@ exactly what the prospect will see before you approve.
 | `AGENT_MODE` | What happens | Cost |
 |---|---|---|
 | `dry-run` (default) | Canned mock outputs, deterministic, no network | **$0, always** |
-| `claude-code` | Shells out to your installed `claude` CLI — runs on your **Claude subscription** | $0 beyond the subscription. **Hits your usage limit → stops working. Never bills extra.** |
+| `claude-code` | Every agent except the Dev Agent runs on a **free local Ollama model** (`hermes3:8b` + the Researcher's `qwen2.5-coder:latest`) — the whole research→draft→QC→consult→digest loop is $0 and never touches your subscription. Only the Dev Agent (weekly, low-frequency, writes real TypeScript) uses the **Claude subscription** — same as before. Ollama down? Everything automatically falls back to the subscription (Haiku) rather than failing a lead. | $0 for the per-lead loop. Dev Agent hits your subscription's usage limit → stops for that run, never bills extra. |
 | `api` | Anthropic API key, pay-per-token | **Real money.** Refuses to run unless you set BOTH `ALLOW_PAID_API=true` and `ANTHROPIC_API_KEY` in `.env` — this is a deliberate double opt-in so it can never trigger by accident. |
+
+Before your first real (non-dry-run) run: `ollama pull hermes3:8b` (~4.7GB,
+alongside the `qwen2.5-coder:latest` you already have for the Researcher).
+Without it, every agent quietly falls back to the subscription instead —
+still $0-beyond-subscription, just not the free path.
 
 If you're just exploring the dashboard or testing a change, leave
 `AGENT_MODE=dry-run`. Only switch to `claude-code` when you want to see real
@@ -129,9 +134,13 @@ npm run build    # production build -> dist/
   reply → the Sales Rep classifies it).
 - **Growth** — MRR milestone tracker, funnel counts, token-usage trend, the
   daily Analytics digest (also written to `vault/Financial Growth/` if you
-  set up an Obsidian vault — see below), and the **Skill Factory** review
+  set up an Obsidian vault — see below), the **Skill Factory** review
   queue: code the Dev Agent writes for itself, which never runs until a human
-  reads it and clicks Approve.
+  reads it and clicks Approve, and **Competitor Intel** — a weekly (or
+  on-demand) scan of ServiceTitan/Housecall Pro/Jobber/FieldEdge/Service
+  Fusion's public pages for positioning, pricing signals, and an honest angle
+  Fieldstone's flat-fee model can use; the sharpest angle feeds straight into
+  the CMO's copy.
 - **JARVIS** (header toggle) — talk to the engine: status questions and
   commands ("approve the Comfort King draft", "pause sends"), voice in/out
   via the browser's speech API. Actions run through a whitelist — it can do

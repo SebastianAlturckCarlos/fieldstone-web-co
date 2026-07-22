@@ -24,6 +24,12 @@ export const AUTO_TICK_MS = Number(process.env.AUTO_TICK_MS ?? 60_000)
 export const SEND_MODE = process.env.SEND_MODE ?? 'mock'
 export const RESEND_API_KEY = process.env.RESEND_API_KEY ?? ''
 export const SEND_FROM = process.env.SEND_FROM ?? 'sebastian@mail.fieldstone-webco.com'
+// Shown as the inbox "From" display name (Resend accepts "Name <email>").
+// A bare address reads as automated; a first name reads as a person — the
+// CMO prompt leans on the pain-first hook instead of a throat-clearing
+// intro paragraph, so this + the body sign-off is where the human identity
+// actually lives.
+export const SENDER_NAME = process.env.SENDER_NAME ?? 'Sebastian'
 export const DAILY_SEND_CAP = Number(process.env.DAILY_SEND_CAP ?? 10)
 export const BUSINESS_POSTAL_ADDRESS = process.env.BUSINESS_POSTAL_ADDRESS ?? ''
 // Where the personalized demo pages live (the marketing site, custom domain —
