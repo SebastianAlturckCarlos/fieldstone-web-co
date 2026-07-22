@@ -48,6 +48,22 @@ function detectGap(): { name: string; description: string; capabilities: string[
     }
   }
 
+  // Structural gap, not memory-triggered — true regardless of today's volume:
+  // site_fetch.ts makes exactly one attempt at a 10s timeout with no retry.
+  // A real trade-business site on cheap shared hosting can legitimately be
+  // slow without being dead; one bad round-trip currently reads identically
+  // to "unreachable" and can cost a genuinely good lead. Ordered ahead of the
+  // lead_enrichment fallback since it's the more specific, better-evidenced
+  // of the two always-available candidates.
+  if (!activeOrPendingSkillExists('site_fetch_retry')) {
+    return {
+      name: 'site_fetch_retry',
+      description: `core/site_fetch.ts gives every prospect site exactly one 10-second attempt before recording fetch_error — a transient network blip or a slow-but-real small-business host currently reads identically to a genuinely dead domain, and either way the Researcher never gets a second look. A short retry (2 attempts, backoff) before giving up protects against false negatives on real leads.`,
+      capabilities: ['http_get'],
+      evidence: [],
+    }
+  }
+
   // Default candidate when memory is still thin: the site has no lead
   // enrichment capability yet, and Part I flags "lead sourcing" as an open
   // decision — proposing it is a genuine, always-true gap, not a guess.

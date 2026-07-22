@@ -31,7 +31,15 @@ export async function runDigest(source = 'manual'): Promise<{ day: string; markd
     if (row?.v) competitors = JSON.parse(row.v).notes ?? []
   } catch { /* absent or malformed — digest still runs without it */ }
 
-  const payload = { day, funnel, ledger, sent: sentToday, opens: 0, replies: 0, competitors }
+  // The prompt asks for anomalies against "the trailing 7-day mean" — it needs
+  // the trailing 7 days to do that. Previously this only ever received today's
+  // numbers, so anomaly detection had no baseline to compare against at all.
+  const trailing7d = db.prepare(
+    `SELECT day, leads_in, audited, drafted, sent, est_spend_usd
+     FROM daily_metrics WHERE day < ? ORDER BY day DESC LIMIT 7`,
+  ).all(day)
+
+  const payload = { day, funnel, ledger, sent: sentToday, opens: 0, replies: 0, competitors, trailing7d }
   const digest = await runAgent('analytics_agent', payload)
   const markdown = typeof digest === 'string' ? digest : digest.markdown
 
