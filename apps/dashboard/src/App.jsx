@@ -5,6 +5,7 @@ import { SynapseCore } from './components/SynapseCore.jsx'
 import { AgentDetail } from './components/AgentDetail.jsx'
 import { GrowthScreen } from './components/GrowthScreen.jsx'
 import { PipelineScreen } from './components/PipelineScreen.jsx'
+import { BacklogScreen } from './components/BacklogScreen.jsx'
 import { CEOCommand } from './components/CEOCommand.jsx'
 import { ImmersionView } from './components/ImmersionView.jsx'
 import { JarvisPanel } from './components/JarvisPanel.jsx'
@@ -75,7 +76,7 @@ export default function App() {
           </span>
         )}
         <nav className="ml-4 flex gap-1 font-mono text-xs">
-          {[['mission', 'Mission Control'], ['pipeline', 'Pipeline'], ['growth', 'Growth']].map(([id, label]) => (
+          {[['mission', 'Mission Control'], ['pipeline', 'Pipeline'], ['backlog', 'Backlog'], ['growth', 'Growth']].map(([id, label]) => (
             <button key={id} onClick={() => setView(id)}
               className="rounded-lg px-3 py-1.5 uppercase tracking-wider transition-colors duration-150"
               style={view === id
@@ -156,6 +157,10 @@ export default function App() {
       ) : view === 'pipeline' ? (
         <main className="flex-1">
           <PipelineScreen replyQueue={state?.replyQueue ?? []} onStateChanged={refresh} />
+        </main>
+      ) : view === 'backlog' ? (
+        <main className="flex-1">
+          <BacklogScreen />
         </main>
       ) : (
         <main className="flex-1">

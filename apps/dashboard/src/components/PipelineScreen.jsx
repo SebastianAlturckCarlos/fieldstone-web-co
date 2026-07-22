@@ -42,15 +42,17 @@ function Funnel({ funnel }) {
   )
 }
 
-// The board's stages. 'pending' absorbs 'processing' (a lead mid-claim is
+// The board's stages — active work only. Once a lead is sent it moves to
+// the Backlog screen (its own tab, not this board): that's the "10 to
+// approve, then 10 more queue up" operating model — sent mail is done, it
+// doesn't need daily attention here, only when a reply pulls it back in via
+// the Follow-up queue. 'pending' absorbs 'processing' (a lead mid-claim is
 // still, from the human's seat, waiting).
 const BOARD_STAGES = [
   ['pending', 'Pending', ['pending', 'processing']],
   ['audited', 'Audited', ['audited']],
   ['drafted', 'Drafted', ['drafted']],
   ['validated', 'Approved', ['validated']],
-  ['sent', 'Sent', ['sent']],
-  ['converted', 'Converted', ['converted']],
   ['failed', 'Failed', ['failed']],
 ]
 

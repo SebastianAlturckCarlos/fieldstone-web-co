@@ -483,10 +483,12 @@ server.listen(PORT, () => {
   if (reclaimed) console.log(`Reclaimed ${reclaimed} lead(s) stuck in 'processing' from a previous run.`)
   if (AUTO_TICK) {
     console.log(`Auto-tick every ${AUTO_TICK_MS / 1000}s — agents run themselves; the human only approves.`)
+    let idleSinceMs: number | null = null
     setInterval(async () => {
       if (tickRunning) return
       const pending = (db.prepare(`SELECT COUNT(*) n FROM leads WHERE lead_status = 'pending'`).get() as any).n
-      if (pending > 0) await runTickGuarded('auto')
+      if (pending > 0) { await runTickGuarded('auto'); idleSinceMs = null }
+      else idleSinceMs ??= Date.now()
       // Human-approved emails go out automatically (mock stamps DB; real mode
       // respects the daily cap + jitter + suppression inside sendValidated)
       const validated = (db.prepare(`SELECT COUNT(*) n FROM leads WHERE lead_status = 'validated'`).get() as any).n
@@ -500,25 +502,40 @@ server.listen(PORT, () => {
       if (!done && new Date().getHours() >= 18) await runDigest('scheduled')
     }, 60 * 60 * 1000)
 
-    // Dev Agent: weekly per the blueprint's Sunday cadence, checked hourly
+    // Dev Agent: weekly (Sunday) per the blueprint's cadence, PLUS whenever
+    // the pending-lead queue has been genuinely dry for a while — "make the
+    // app better while there's nothing to send" per the operator's standing
+    // instruction. Cooldown (not "once per idle day") because idleSinceMs
+    // resets to null the moment a lead is claimed, so a stop-start day would
+    // otherwise never re-fire; 2h keeps this rare since it's the one agent
+    // still on the Claude subscription — a handful of checks a day, not a
+    // poll loop. detectGap() itself refuses to propose the same gap twice.
     setInterval(async () => {
-      if (new Date().getDay() !== 0) return // Sunday only
+      const isSunday = new Date().getDay() === 0
       const today = new Date().toISOString().slice(0, 10)
-      const alreadyRan = db.prepare(
-        `SELECT 1 FROM system_skills WHERE date(created_at) = ?`,
-      ).get(today)
-      if (!alreadyRan) await runDevAgentCycle('scheduled')
+      const ranToday = db.prepare(`SELECT 1 FROM system_skills WHERE date(created_at) = ?`).get(today)
+      const idleLongEnough = idleSinceMs !== null && Date.now() - idleSinceMs > 2 * 60 * 60 * 1000
+      const row = db.prepare(`SELECT v FROM kv WHERE k = 'dev_agent_last_check'`).get() as any
+      const checkedRecently = row?.v && Date.now() - Number(row.v) < 2 * 60 * 60 * 1000
+      if ((isSunday && !ranToday) || (idleLongEnough && !checkedRecently)) {
+        db.prepare(`INSERT OR REPLACE INTO kv (k, v, updated_at) VALUES ('dev_agent_last_check', ?, CURRENT_TIMESTAMP)`).run(String(Date.now()))
+        await runDevAgentCycle(isSunday ? 'scheduled' : 'idle')
+      }
     }, 60 * 60 * 1000)
 
-    // Competitor scan: same weekly cadence, ahead of the Dev Agent so a
-    // fresh competitive angle is available all week (positioning/pricing
-    // pages don't move day to day — no reason to hit them more often).
+    // Competitor scan: weekly, PLUS on the same idle trigger — this is the
+    // free (Hermes) half of "keep improving while nothing's sending", so it
+    // can run far more liberally than the Dev Agent with zero cost concern.
     setInterval(async () => {
-      if (new Date().getDay() !== 0) return // Sunday only
+      const isSunday = new Date().getDay() === 0
       const today = new Date().toISOString().slice(0, 10)
-      const row = db.prepare(`SELECT updated_at FROM kv WHERE k = 'competitor_intel'`).get() as any
-      const alreadyRan = row?.updated_at && String(row.updated_at).slice(0, 10) === today
-      if (!alreadyRan) await runCompetitorScan('scheduled')
+      const row = db.prepare(`SELECT v, updated_at FROM kv WHERE k = 'competitor_intel'`).get() as any
+      const scannedToday = row?.updated_at && String(row.updated_at).slice(0, 10) === today
+      const idleLongEnough = idleSinceMs !== null && Date.now() - idleSinceMs > 60 * 60 * 1000
+      const scannedRecently = row?.updated_at && Date.now() - Date.parse(String(row.updated_at) + 'Z') < 60 * 60 * 1000
+      if ((isSunday && !scannedToday) || (idleLongEnough && !scannedRecently)) {
+        await runCompetitorScan(isSunday ? 'scheduled' : 'idle')
+      }
     }, 60 * 60 * 1000)
   }
 })

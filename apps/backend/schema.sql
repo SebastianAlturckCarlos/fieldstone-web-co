@@ -14,6 +14,10 @@ CREATE TABLE IF NOT EXISTS leads (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(lead_status);
+-- Hard dedup floor: no email ever gets contacted twice, however it got
+-- entered (seed, CSV import, or a future sourcing skill). Case-insensitive
+-- via COLLATE NOCASE since inboxes are case-insensitive in practice.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_email_unique ON leads(contact_email COLLATE NOCASE);
 
 CREATE TABLE IF NOT EXISTS outreach_emails (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -8,7 +8,8 @@
     "seed": "tsx src/jobs/seed.ts",
     "tick": "tsx src/tick.ts",
     "status": "tsx src/jobs/status.ts",
-    "reset": "tsx src/jobs/reset.ts"
+    "reset": "tsx src/jobs/reset.ts",
+    "import-leads": "tsx src/jobs/import_leads.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",

@@ -12,6 +12,14 @@ import { AGENT_MODE } from './config.js'
 const BATCH_SIZE = 10
 const MAX_QA_LOOPS = 4
 
+// The approval queue is a WATERMARK, not a one-shot batch: keep roughly this
+// many drafts waiting for a human decision at all times. Drafting far beyond
+// what one person can review in a day just piles up stale copy (and burns
+// cycles re-auditing sites that may have changed by the time anyone looks) —
+// as leads clear the queue (approved, rejected, or sent), the next tick tops
+// it back up to the watermark instead of grabbing a fresh full batch blind.
+const APPROVAL_QUEUE_TARGET = 10
+
 // A subscription usage-limit hit (claude-code fallback path, or the Dev
 // Agent) looks like an ordinary thrown Error from the CLI, not a typed
 // BudgetExceeded — but it means the same thing: this is a PAUSE, not a
@@ -53,11 +61,23 @@ function transition(lead: Lead, status: string, extra: { audit?: any; failReason
 export async function tick() {
   assertUnderBudget()
 
+  const awaitingApproval = (db.prepare(
+    `SELECT COUNT(*) n FROM outreach_emails o JOIN leads l ON l.id = o.lead_id
+     WHERE l.lead_status = 'drafted' AND o.approved_by IS NULL AND o.sent_at IS NULL`,
+  ).get() as any).n
+  const room = Math.max(0, APPROVAL_QUEUE_TARGET - awaitingApproval)
+  const claimSize = Math.min(BATCH_SIZE, room)
+
+  if (claimSize === 0) {
+    console.log(`Approval queue at watermark (${awaitingApproval}/${APPROVAL_QUEUE_TARGET}) — holding new drafts until it clears.`)
+    return
+  }
+
   const leads = db.prepare(
     `UPDATE leads SET lead_status = 'processing', updated_at = CURRENT_TIMESTAMP
      WHERE id IN (SELECT id FROM leads WHERE lead_status = 'pending' LIMIT ?)
      RETURNING *`,
-  ).all(BATCH_SIZE) as Lead[]
+  ).all(claimSize) as Lead[]
 
   if (!leads.length) {
     console.log('No pending leads.')
