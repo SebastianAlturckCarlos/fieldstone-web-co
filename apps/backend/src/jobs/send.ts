@@ -76,6 +76,13 @@ export async function deliver(to: string, subject: string, body: string, opts: D
       text: body + complianceFooter(),
       html: renderHtmlBody(body, opts.companyName ?? 'your company', hasSnapshot),
       ...(REPLY_TO ? { reply_to: REPLY_TO } : {}),
+      // RFC 2369 List-Unsubscribe — Gmail/Outlook read this regardless of the
+      // in-body "reply stop" line, and its presence alone is a real inbox-
+      // placement signal (its absence is a common spam-classifier tell).
+      // mailto-only deliberately: List-Unsubscribe-Post (one-click HTTP) needs
+      // a publicly reachable endpoint, which this engine doesn't have — a
+      // dead unsubscribe link would hurt more than the header helps.
+      ...(REPLY_TO ? { headers: { 'List-Unsubscribe': `<mailto:${REPLY_TO}?subject=unsubscribe>` } } : {}),
     }
     if (hasSnapshot) {
       payload.attachments = [{
